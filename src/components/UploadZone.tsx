@@ -102,7 +102,7 @@ export default function UploadZone({ file, setFile }: Props) {
           />
         </label>
       ) : (
-        <div className="flex flex-col items-center gap-4">
+        <div className="flex flex-col items-center gap-4 w-full min-w-0">
           <div className={`file-cards-wrap${dealt ? " dealt" : ""}`}>
             <div className="file-card fc-p1">
               <div className="fc-lines">
@@ -125,10 +125,25 @@ export default function UploadZone({ file, setFile }: Props) {
                 <div className="fc-line" style={{ width: "80%" }} />
                 <div className="fc-line" style={{ width: "65%" }} />
               </div>
-              <span className="fc-filename">{file.name}</span>
+              <span
+                className="fc-filename"
+                style={{
+                  display: "block",
+                  maxWidth: "100%",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+                title={file.name}
+              >
+                {file.name}
+              </span>
             </div>
           </div>
-          <div className="text-center">
+          <div
+            className="text-center min-w-0"
+            style={{ maxWidth: "16rem", width: "100%" }}
+          >
             <p
               className="text-sm font-bold"
               style={{ color: "var(--text-primary)" }}
@@ -140,8 +155,9 @@ export default function UploadZone({ file, setFile }: Props) {
               File ready
             </p>
             <p
-              className="mt-0.5 text-xs truncate max-w-xs"
+              className="mt-0.5 text-xs truncate"
               style={{ color: "var(--text-muted)" }}
+              title={file.name}
             >
               {file.name}
             </p>

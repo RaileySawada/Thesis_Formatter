@@ -14,10 +14,10 @@ interface Props {
 const SECTIONS = [
   {
     value: "preliminary",
-    label: "Preliminary",
-    sub: "Title page, approval sheet, abstract",
+    label: "Preliminary Pages",
+    sub: "Title page, approval sheet, abstract, TOC",
     icon: "fa-file-lines",
-    disabled: true,
+    disabled: false,
   },
   {
     value: "chapters",

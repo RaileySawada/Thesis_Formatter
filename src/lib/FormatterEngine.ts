@@ -70,6 +70,12 @@ function getParagraphText(p: Element): string {
   const parts: string[] = [];
   p.querySelectorAll("*").forEach((el) => {
     if (el.localName === "t" && el.namespaceURI === W_NS) {
+      // Skip text inside text boxes — they are floating shapes, not paragraph content
+      let ancestor = el.parentElement;
+      while (ancestor && ancestor !== p) {
+        if (ancestor.localName === "txbxContent") return;
+        ancestor = ancestor.parentElement;
+      }
       const run = el.parentElement;
       if (run && run.localName === "r") {
         const hasSpecial = Array.from(run.children).some((c) =>
@@ -147,8 +153,6 @@ function writePIndent(p: Element, firstTwips: number) {
   removeChildren(pPr, "ind");
   const ind = wElem(p.ownerDocument!, "ind");
   pPr.appendChild(ind);
-  // Remove any hanging attribute — it conflicts with firstLine in Word
-  // Only set firstLine if > 0
   if (firstTwips > 0) {
     setWAttr(ind, "firstLine", String(firstTwips));
   }
@@ -166,7 +170,6 @@ function writePHangingIndent(
   pPr.appendChild(ind);
   setWAttr(ind, "left", String(leftTwips));
   setWAttr(ind, "hanging", String(hangingTwips));
-  // Do not set firstLine — it conflicts with hanging in Word
 }
 function writePSpacing(
   p: Element,
@@ -241,7 +244,9 @@ function writeRuns(
   );
   const textRuns = allRuns.filter((r) => {
     const special = Array.from(r.children).some((c) =>
-      ["drawing", "pict", "instrText", "fldChar"].includes(c.localName),
+      ["drawing", "pict", "instrText", "fldChar", "AlternateContent"].includes(
+        c.localName,
+      ),
     );
     return !special;
   });
@@ -370,12 +375,91 @@ function stripLeadingTabRuns(p: Element) {
     const hasOther = Array.from(run.children).some((c) =>
       ["drawing", "pict", "instrText", "fldChar", "br"].includes(c.localName),
     );
-    if (hasTab && !hasTxt && !hasOther) p.removeChild(run);
-    else break;
+    if (hasOther) break;
+    if (hasTab && !hasTxt) {
+      p.removeChild(run);
+    } else if (hasTab && hasTxt) {
+      Array.from(run.getElementsByTagNameNS(W_NS, "tab")).forEach((tab) => {
+        tab.parentElement?.removeChild(tab);
+      });
+      break;
+    } else {
+      break;
+    }
   }
 }
 
-// Strip leading whitespace (spaces, tabs) from the actual text content of the first non-empty run
+// Strip leading runs that contain only arrow/bullet/symbol characters (e.g. →, •, ►)
+function stripLeadingArrowRuns(p: Element) {
+  const ARROW_ONLY =
+    /^[\u2192\u2190\u2191\u2193\u21D2\u25BA\u25B6\u25CF\u2022\u2023\u2043\u2013\u2014\u2015\s\t]+$/u;
+  const LEADING_ARROWS =
+    /^[\u2192\u2190\u2191\u2193\u21D2\u25BA\u25B6\u25CF\u2022\u2023\u2043\s\t]+/u;
+
+  const runs = Array.from(p.childNodes).filter(
+    (c): c is Element => c instanceof Element && c.localName === "r",
+  );
+  for (const run of runs) {
+    const hasOther = Array.from(run.children).some((c) =>
+      ["drawing", "pict", "instrText", "fldChar", "br"].includes(c.localName),
+    );
+    if (hasOther) break;
+
+    const hasTab = run.getElementsByTagNameNS(W_NS, "tab").length > 0;
+    const tEl = run.getElementsByTagNameNS(W_NS, "t").item(0) as Element | null;
+    const text = tEl?.textContent ?? "";
+
+    if (ARROW_ONLY.test(text) || (hasTab && text.trim() === "")) {
+      p.removeChild(run);
+      continue;
+    }
+
+    if (tEl) {
+      const stripped = text.replace(LEADING_ARROWS, "");
+      if (stripped !== text) {
+        if (stripped === "") {
+          p.removeChild(run);
+        } else {
+          tEl.textContent = stripped;
+          tEl.setAttribute("xml:space", "preserve");
+        }
+      }
+      break;
+    }
+
+    break;
+  }
+}
+
+function stripTrailingTextWhitespace(p: Element) {
+  const runs = Array.from(p.childNodes).filter(
+    (c): c is Element =>
+      c instanceof Element && c.localName === "r" && c.namespaceURI === W_NS,
+  );
+  for (let i = runs.length - 1; i >= 0; i--) {
+    const run = runs[i];
+    const hasOther = Array.from(run.children).some((c) =>
+      ["drawing", "pict", "instrText", "fldChar", "br", "tab"].includes(
+        c.localName,
+      ),
+    );
+    if (hasOther) continue;
+    const tEl = run.getElementsByTagNameNS(W_NS, "t").item(0) as Element | null;
+    if (!tEl) continue;
+    const original = tEl.textContent ?? "";
+    const trimmed = original.replace(/[\s\t]+$/, "");
+    if (trimmed === "") {
+      p.removeChild(run);
+      continue;
+    }
+    if (trimmed !== original) {
+      tEl.textContent = trimmed;
+      tEl.setAttribute("xml:space", "preserve");
+    }
+    break;
+  }
+}
+
 function stripLeadingTextWhitespace(p: Element) {
   const runs = Array.from(p.childNodes).filter(
     (c): c is Element =>
@@ -393,7 +477,6 @@ function stripLeadingTextWhitespace(p: Element) {
     const original = tEl.textContent ?? "";
     const trimmed = original.replace(/^[\s\t]+/, "");
     if (trimmed === "") {
-      // Entire run is whitespace — remove it and keep scanning
       p.removeChild(run);
       continue;
     }
@@ -401,7 +484,7 @@ function stripLeadingTextWhitespace(p: Element) {
       tEl.textContent = trimmed;
       tEl.setAttribute("xml:space", "preserve");
     }
-    break; // stop after first non-empty run
+    break;
   }
 }
 
@@ -420,6 +503,32 @@ function getPFirstLineIndent(p: Element): number {
   const ind = p.getElementsByTagNameNS(W_NS, "ind").item(0) as Element | null;
   if (!ind) return 0;
   return parseInt(wAttr(ind, "firstLine") || "0", 10);
+}
+
+// ─── content control unwrapper ───────────────────────────────────────────────
+
+function unwrapContentControls(body: Element) {
+  let changed = true;
+  while (changed) {
+    changed = false;
+    const sdts = Array.from(body.getElementsByTagNameNS(W_NS, "sdt"));
+    for (const sdt of sdts) {
+      const parent = sdt.parentElement;
+      if (!parent) continue;
+      const sdtContent = Array.from(sdt.childNodes).find(
+        (c): c is Element =>
+          c instanceof Element && c.localName === "sdtContent",
+      );
+      if (sdtContent) {
+        Array.from(sdtContent.childNodes).forEach((child) => {
+          parent.insertBefore(child.cloneNode(true), sdt);
+        });
+      }
+      parent.removeChild(sdt);
+      changed = true;
+      break;
+    }
+  }
 }
 
 // ─── paragraph formatters ────────────────────────────────────────────────────
@@ -620,13 +729,74 @@ interface Rules {
   pagination?: boolean;
 }
 
+// ─── white cover shape namespace constants ────────────────────────────────────
+
+const WP_NS_DRAW =
+  "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing";
+const A_NS_DRAW = "http://schemas.openxmlformats.org/drawingml/2006/main";
+const WPS_NS_DRAW =
+  "http://schemas.microsoft.com/office/word/2010/wordprocessingShape";
+
 function applyChapterLabel(p: Element, rules: Rules) {
+  // First collect the chapter label text before stripping anything
+  const rawText = getParagraphText(p);
+  const m = normalizeText(rawText).match(/^chapter\s+([ivxlcdm]+|\d+)$/iu);
+  const token = m ? (/^\d+$/.test(m[1]) ? m[1] : m[1].toUpperCase()) : null;
+  const canonical = token ? "Chapter " + token : normalizeText(rawText);
+
+  // Remove only text runs — any run containing a drawing, shape, or
+  // AlternateContent is left completely untouched.
+  Array.from(p.childNodes)
+    .filter(
+      (c): c is Element =>
+        c instanceof Element &&
+        c.localName === "r" &&
+        c.namespaceURI === W_NS &&
+        !Array.from(c.children).some((ch) =>
+          [
+            "drawing",
+            "pict",
+            "AlternateContent",
+            "instrText",
+            "fldChar",
+          ].includes(ch.localName),
+        ),
+    )
+    .forEach((r) => p.removeChild(r));
+
+  // Insert a single clean run with the canonical text
+  const cleanRun = wElem(p.ownerDocument!, "r");
+  const tEl = wElem(p.ownerDocument!, "t");
+  tEl.textContent = canonical;
+  cleanRun.appendChild(tEl);
+  p.appendChild(cleanRun);
+
   stripAll(p);
-  titleCaseParagraphText(p);
-  if (rules.alignment) writePAlignment(p, "center");
-  if (rules.indentation) writePIndent(p, 0);
+
+  // Remove empty paragraphs before this chapter label — but NEVER remove
+  // a paragraph that carries a sectPr, as that controls page numbering.
+  if (p.parentElement) {
+    let prev = p.previousSibling as Element | null;
+    while (
+      prev instanceof Element &&
+      prev.localName === "p" &&
+      normalizeText(getParagraphText(prev)) === ""
+    ) {
+      const pPrEl = prev.getElementsByTagNameNS(W_NS, "pPr").item(0);
+      const hasSectPr =
+        pPrEl != null &&
+        pPrEl.getElementsByTagNameNS(W_NS, "sectPr").length > 0;
+      if (hasSectPr) break;
+      const toRemove = prev;
+      prev = prev.previousSibling as Element | null;
+      p.parentElement.removeChild(toRemove);
+    }
+  }
+
+  writePAlignment(p, "center");
+  writePIndent(p, 0);
   if (rules.spacing) writePSpacing(p, 0, 0, 480);
-  if (rules.pagination) writePageBreakBefore(p, true);
+  writePageBreakBefore(p, true);
   writeRuns(p, "Garamond", 28, true, false);
   writePPrRPr(p, "Garamond", 28, true, false);
 }
@@ -634,9 +804,13 @@ function applyChapterLabel(p: Element, rules: Rules) {
 function applyChapterTitle(p: Element, rules: Rules) {
   stripAll(p);
   stripOrphanedBookmarks(p);
+  stripLeadingTabRuns(p);
+  stripLeadingArrowRuns(p);
+  stripLeadingTextWhitespace(p);
+  stripTrailingTextWhitespace(p);
   uppercaseParagraphText(p);
-  if (rules.alignment) writePAlignment(p, "center");
-  if (rules.indentation) writePIndent(p, 0);
+  writePAlignment(p, "center");
+  writePIndent(p, 0);
   if (rules.spacing) writePSpacing(p, 0, 0, 720);
   writeRuns(p, "Garamond", 28, true, false);
   writePPrRPr(p, "Garamond", 28, true, false);
@@ -644,9 +818,13 @@ function applyChapterTitle(p: Element, rules: Rules) {
 
 function applyReferencesTitle(p: Element, rules: Rules) {
   stripAll(p);
+  stripLeadingTabRuns(p);
+  stripLeadingArrowRuns(p);
+  stripLeadingTextWhitespace(p);
+  stripTrailingTextWhitespace(p);
   uppercaseParagraphText(p);
-  if (rules.alignment) writePAlignment(p, "center");
-  if (rules.indentation) writePIndent(p, 0);
+  writePAlignment(p, "center");
+  writePIndent(p, 0);
   if (rules.spacing) writePSpacing(p, 0, 0, 720);
   writeRuns(p, "Garamond", 28, true, false);
   writePPrRPr(p, "Garamond", 28, true, false);
@@ -655,6 +833,9 @@ function applyReferencesTitle(p: Element, rules: Rules) {
 function applyHeading(p: Element, rules: Rules) {
   stripAll(p);
   stripLeadingTabRuns(p);
+  stripLeadingArrowRuns(p);
+  stripLeadingTextWhitespace(p);
+  stripTrailingTextWhitespace(p);
   if (rules.alignment) writePAlignment(p, "left");
   if (rules.indentation) writePIndent(p, 0);
   if (rules.spacing) writePSpacing(p, 0, 0, 480);
@@ -665,6 +846,9 @@ function applyHeading(p: Element, rules: Rules) {
 function applyItalicHeading(p: Element, rules: Rules) {
   stripAll(p);
   stripLeadingTabRuns(p);
+  stripLeadingArrowRuns(p);
+  stripLeadingTextWhitespace(p);
+  stripTrailingTextWhitespace(p);
   if (rules.alignment) writePAlignment(p, "left");
   if (rules.spacing) writePSpacing(p, 0, 0, 480);
   const pPr = ensurePPr(p);
@@ -682,11 +866,11 @@ function applyItalicHeading(p: Element, rules: Rules) {
 function applyBodyParagraph(p: Element, rules: Rules, beforeSpacing = 0) {
   stripAll(p);
   stripLeadingTabRuns(p);
+  stripLeadingArrowRuns(p);
   stripLeadingTextWhitespace(p);
+  stripTrailingTextWhitespace(p);
   if (rules.alignment) writePAlignment(p, "both");
-  // Always apply first-line 1.27cm indent, zero left/right/hanging
   writePIndent(p, 720);
-  // Always zero before/after spacing, double line spacing
   writePSpacing(p, beforeSpacing, 0, 480);
   removePBdr(p);
   writeRuns(p, "Garamond", 24, null, null);
@@ -696,6 +880,7 @@ function applyBodyParagraph(p: Element, rules: Rules, beforeSpacing = 0) {
 function applyReferenceEntry(p: Element, rules: Rules) {
   stripAll(p);
   stripLeadingTabRuns(p);
+  stripLeadingArrowRuns(p);
   stripLeadingTextWhitespace(p);
   if (rules.alignment) writePAlignment(p, "both");
   if (rules.indentation) writePHangingIndent(p, 720, 720);
@@ -705,26 +890,79 @@ function applyReferenceEntry(p: Element, rules: Rules) {
   writePPrRPr(p, "Garamond", 22, false, false);
 }
 
+// ─── List paragraph formatter ────────────────────────────────────────────────
+//
+// Indentation spec (from user requirement):
+//   ilvl=0  top-level numbered items  → left=363 twips (0.64cm), hanging=363
+//   ilvl=1  sub-items (2.1, 2.2 …)   → left=720 twips (1.27cm), hanging=0
+//
+// IMPORTANT: We keep w:numPr so Word still renders the actual numbers (1., 2., 3.…).
+// We strip only ind and tabs, then write explicit w:ind to override Word's default
+// numbering indentation with our desired values.
+
+function getNumIlvl(p: Element): number {
+  const numPr = p.querySelector("pPr > numPr");
+  if (!numPr) return 0;
+  const ilvlEl = getChild(numPr, "ilvl");
+  if (!ilvlEl) return 0;
+  return parseInt(wAttr(ilvlEl, "val") || "0", 10);
+}
+
 function applyListParagraph(p: Element, rules: Rules) {
+  // Read indent level BEFORE any stripping
+  const ilvl = getNumIlvl(p);
+
   const pPr = getChild(p, "pPr");
   if (pPr) {
     for (const tag of [
       "pStyle",
       "rPr",
       "widowControl",
-      "ind",
+      "ind", // remove old ind — we write a new one below
       "spacing",
       "jc",
       "pageBreakBefore",
       "keepNext",
       "keepLines",
+      // NOTE: numPr is intentionally NOT stripped — it provides the actual numbers
+      "tabs", // remove tabs — ind takes over indentation control
     ])
       removeChildren(pPr, tag);
   }
+
   stripLeadingTabRuns(p);
+  stripLeadingArrowRuns(p);
   stripLeadingTextWhitespace(p);
+  stripTrailingTextWhitespace(p);
+
   if (rules.alignment) writePAlignment(p, "both");
   writePSpacing(p, 0, 0, 480);
+
+  // Write explicit ind to override whatever the numbering definition says.
+  // CRITICAL: ind must be inserted AFTER numPr in the pPr child order.
+  // Word resolves indentation by taking the last ind it sees; if ind appears
+  // before numPr the numbering definition wins and our values are ignored.
+  //   ilvl=0 → left=363 (0.64cm), hanging=363
+  //   ilvl=1 → left=720 (1.27cm), firstLine=0
+  const pPrEl = ensurePPr(p);
+  removeChildren(pPrEl, "ind");
+  const ind = wElem(p.ownerDocument!, "ind");
+  if (ilvl === 0) {
+    setWAttr(ind, "left", "363");
+    setWAttr(ind, "hanging", "363");
+  } else {
+    setWAttr(ind, "left", "720");
+    setWAttr(ind, "firstLine", "0");
+  }
+  setWAttr(ind, "right", "0");
+  // Insert ind immediately after numPr so it takes precedence
+  const numPrInPPr = getChild(pPrEl, "numPr");
+  if (numPrInPPr?.nextSibling) {
+    pPrEl.insertBefore(ind, numPrInPPr.nextSibling);
+  } else {
+    pPrEl.appendChild(ind);
+  }
+
   writeRuns(p, "Garamond", 24, false, false);
   writePPrRPr(p, "Garamond", 24, false, false);
 }
@@ -732,8 +970,9 @@ function applyListParagraph(p: Element, rules: Rules) {
 function applyFigureCaption(p: Element, rules: Rules) {
   stripAll(p);
   stripLeadingTabRuns(p);
+  stripLeadingArrowRuns(p);
   stripLeadingTextWhitespace(p);
-  // Always centered, zero indent, zero before/after spacing
+  stripTrailingTextWhitespace(p);
   writePAlignment(p, "center");
   writePIndent(p, 0);
   writePSpacing(p, 0, 0, 480);
@@ -746,8 +985,9 @@ function applyFigureCaption(p: Element, rules: Rules) {
 function applyTableCaption(p: Element, rules: Rules) {
   stripAll(p);
   stripLeadingTabRuns(p);
+  stripLeadingArrowRuns(p);
   stripLeadingTextWhitespace(p);
-  // Always left aligned, zero indent, zero before/after spacing
+  stripTrailingTextWhitespace(p);
   writePAlignment(p, "left");
   writePIndent(p, 0);
   writePSpacing(p, 0, 0, 240);
@@ -759,6 +999,10 @@ function applyTableCaption(p: Element, rules: Rules) {
 
 function applyLegend(p: Element, rules: Rules) {
   stripAll(p);
+  stripLeadingTabRuns(p);
+  stripLeadingArrowRuns(p);
+  stripLeadingTextWhitespace(p);
+  stripTrailingTextWhitespace(p);
   if (rules.alignment) writePAlignment(p, "left");
   if (rules.indentation) writePIndent(p, 0);
   if (rules.spacing) writePSpacing(p, 0, 0, 240);
@@ -772,7 +1016,6 @@ function applyContinuationLabel(p: Element, rules: Rules, tableNumber: string) {
   if (rules.indentation) writePIndent(p, 0);
   if (rules.spacing) writePSpacing(p, 0, 0, 240);
 
-  // Remove page-break runs
   Array.from(p.querySelectorAll("br")).forEach((br) => {
     if (br.namespaceURI === W_NS && wAttr(br, "type") === "page") {
       const run = br.parentElement;
@@ -839,7 +1082,6 @@ function applyFigureParagraph(p: Element, rules?: Rules) {
   rPr.appendChild(szCs);
   pPr.appendChild(rPr);
 
-  // Collect all w:drawing elements via recursive walk (querySelectorAll is unreliable for namespaced XML)
   const allDrawings: Element[] = [];
   const walkForDrawings = (node: Element) => {
     for (const c of Array.from(node.childNodes)) {
@@ -852,7 +1094,6 @@ function applyFigureParagraph(p: Element, rules?: Rules) {
   walkForDrawings(p);
 
   allDrawings.forEach((drawing) => {
-    // Check if already inline
     const existingInline = Array.from(drawing.childNodes).find(
       (c): c is Element =>
         c instanceof Element &&
@@ -861,7 +1102,6 @@ function applyFigureParagraph(p: Element, rules?: Rules) {
     );
 
     if (existingInline) {
-      // Already inline — fix effectExtent only if not already set to full stroke width
       const existingEff = Array.from(existingInline.childNodes).find(
         (c): c is Element =>
           c instanceof Element && c.localName === "effectExtent",
@@ -871,9 +1111,8 @@ function applyFigureParagraph(p: Element, rules?: Rules) {
         existingEff.getAttribute("t") === "38100" &&
         existingEff.getAttribute("b") === "38100"
       )
-        return; // already correct, skip
+        return;
 
-      // Remove old effectExtent and insert correct one
       if (existingEff) existingInline.removeChild(existingEff);
       const eff = drawing.ownerDocument!.createElementNS(
         WP_NS,
@@ -892,7 +1131,6 @@ function applyFigureParagraph(p: Element, rules?: Rules) {
       return;
     }
 
-    // Anchored — convert to inline
     const anchor = Array.from(drawing.childNodes).find(
       (c): c is Element =>
         c instanceof Element &&
@@ -900,6 +1138,22 @@ function applyFigureParagraph(p: Element, rules?: Rules) {
         c.localName === "anchor",
     );
     if (!anchor) return;
+
+    // Strip any text-wrap element so the figure never floats beside text
+    Array.from(anchor.childNodes)
+      .filter(
+        (c): c is Element =>
+          c instanceof Element &&
+          [
+            "wrapSquare",
+            "wrapTight",
+            "wrapThrough",
+            "wrapTopAndBottom",
+            "wrapBehindText",
+            "wrapInFrontOfText",
+          ].includes(c.localName),
+      )
+      .forEach((c) => anchor.removeChild(c));
 
     const inline = drawing.ownerDocument!.createElementNS(WP_NS, "wp:inline");
     inline.setAttribute("distT", "0");
@@ -920,7 +1174,6 @@ function applyFigureParagraph(p: Element, rules?: Rules) {
       WP_NS,
       "wp:effectExtent",
     );
-    // Full 3pt stroke in EMU = 38100, reserves full border width on all sides
     eff.setAttribute("l", "38100");
     eff.setAttribute("t", "38100");
     eff.setAttribute("r", "38100");
@@ -937,7 +1190,6 @@ function applyFigureParagraph(p: Element, rules?: Rules) {
     drawing.replaceChild(inline, anchor);
   });
 
-  // Apply 3pt border to every figure unconditionally — no skipping, no conditions
   if (!rules || rules.borders) {
     const makeLn = (doc: Document): Element => {
       const ln = doc.createElementNS(A_NS, "a:ln");
@@ -951,7 +1203,6 @@ function applyFigureParagraph(p: Element, rules?: Rules) {
     };
 
     const applyLnToSpPr = (spPr: Element) => {
-      // Always remove existing ln and replace with fresh 3pt one
       Array.from(spPr.childNodes)
         .filter(
           (c): c is Element => c instanceof Element && c.localName === "ln",
@@ -979,7 +1230,6 @@ function applyFigureParagraph(p: Element, rules?: Rules) {
       else spPr.appendChild(ln);
     };
 
-    // Recursive walk — find ALL spPr by localName (pic:spPr, a:spPr, wps:spPr)
     const spPrList: Element[] = [];
     const walkForSpPr = (node: Element) => {
       for (const c of Array.from(node.childNodes)) {
@@ -993,7 +1243,6 @@ function applyFigureParagraph(p: Element, rules?: Rules) {
     if (spPrList.length > 0) {
       spPrList.forEach(applyLnToSpPr);
     } else {
-      // No spPr found — apply pBdr unconditionally
       const pPrEl = ensurePPr(p);
       removeChildren(pPrEl, "pBdr");
       const pBdr = wElem(p.ownerDocument!, "pBdr");
@@ -1028,7 +1277,6 @@ function deFloatTable(tbl: Element) {
 function applyTableBordersSpec(tbl: Element) {
   deFloatTable(tbl);
 
-  // Remove empty cell paragraphs
   Array.from(tbl.querySelectorAll("tc")).forEach((tc) => {
     if (tc.namespaceURI !== W_NS) return;
     const cellParas = Array.from(tc.querySelectorAll("p")).filter(
@@ -1041,18 +1289,22 @@ function applyTableBordersSpec(tbl: Element) {
       const hasDrawing = p.querySelectorAll("drawing, pict").length > 0;
       return t !== "" || hasDrawing;
     });
-    if (nonEmpty.length > 0) {
-      cellParas.forEach((cp) => {
-        const t = Array.from(cp.querySelectorAll("t"))
-          .map((e) => (e.textContent ?? "").trim())
-          .join("");
-        const hasDrawing = cp.querySelectorAll("drawing, pict").length > 0;
-        if (t === "" && !hasDrawing) cp.parentElement?.removeChild(cp);
-      });
-    }
+    // Always remove empty paragraphs from cells — including trailing blank
+    // lines at the bottom — regardless of whether the cell has content.
+    // Keep at least one paragraph if the cell would otherwise be left empty
+    // (Word requires at least one paragraph per cell).
+    cellParas.forEach((cp) => {
+      // Never remove the very last paragraph in a cell — Word requires it
+      if (cp === cellParas[cellParas.length - 1] && nonEmpty.length === 0)
+        return;
+      const t = Array.from(cp.querySelectorAll("t"))
+        .map((e) => (e.textContent ?? "").trim())
+        .join("");
+      const hasDrawing = cp.querySelectorAll("drawing, pict").length > 0;
+      if (t === "" && !hasDrawing) cp.parentElement?.removeChild(cp);
+    });
   });
 
-  // Remove empty rows
   const allRows = Array.from(tbl.querySelectorAll("tr")).filter(
     (r) => r.namespaceURI === W_NS,
   );
@@ -1066,12 +1318,10 @@ function applyTableBordersSpec(tbl: Element) {
   if (emptyRows.length < allRows.length)
     emptyRows.forEach((r) => r.parentElement?.removeChild(r));
 
-  // Remove fixed row heights
   Array.from(tbl.querySelectorAll("trHeight")).forEach((trH) => {
     if (trH.namespaceURI === W_NS) trH.parentElement?.removeChild(trH);
   });
 
-  // Full width
   const tblPrW = ensureChild(tbl, "tblPr");
   removeChildren(tblPrW, "tblW");
   const tblW = wElem(tbl.ownerDocument!, "tblW");
@@ -1082,7 +1332,6 @@ function applyTableBordersSpec(tbl: Element) {
     if (tcW.namespaceURI === W_NS) tcW.parentElement?.removeChild(tcW);
   });
 
-  // tblBorders
   const tblPr = ensureChild(tbl, "tblPr");
   removeChildren(tblPr, "tblBorders");
   const tblBorders = wElem(tbl.ownerDocument!, "tblBorders");
@@ -1110,7 +1359,6 @@ function applyTableBordersSpec(tbl: Element) {
   const firstRow = rows[0];
   const lastRow = rows[rows.length - 1];
 
-  // Wipe tcBorders on non-last rows
   rows.forEach((row) => {
     if (row === lastRow) return;
     Array.from(row.querySelectorAll("tc")).forEach((tc) => {
@@ -1120,7 +1368,6 @@ function applyTableBordersSpec(tbl: Element) {
     });
   });
 
-  // Header row: bottom single
   Array.from(firstRow.querySelectorAll("tc")).forEach((tc) => {
     if (tc.namespaceURI !== W_NS) return;
     let tcPr = getChild(tc, "tcPr");
@@ -1138,7 +1385,6 @@ function applyTableBordersSpec(tbl: Element) {
     tcBdr.appendChild(el);
   });
 
-  // Footer row
   if (rows.length > 1) {
     Array.from(lastRow.querySelectorAll("tc")).forEach((tc) => {
       if (tc.namespaceURI !== W_NS) return;
@@ -1148,7 +1394,6 @@ function applyTableBordersSpec(tbl: Element) {
         tc.insertBefore(tcPr, tc.firstChild);
       }
 
-      // Read existing top border
       let existingTopVal = "",
         existingTopSz = "",
         existingTopClr = "",
@@ -1217,7 +1462,6 @@ function isHeading(p: Element, text: string): boolean {
   if (/^\[\d+\]/u.test(text)) return false;
   if (text.length > 150) return false;
 
-  // Numbered section headings
   if (/^\d+\.\d+(\.\d+)*(\s+\S.*)?$/u.test(text)) return true;
 
   if (getPFirstLineIndent(p) > 0) return false;
@@ -1265,7 +1509,6 @@ function isHeading(p: Element, text: string): boolean {
 function isItalicHeading(p: Element, text: string): boolean {
   if (!text) return false;
 
-  // Pattern D: numbered bold objectives
   if (
     /^\d+\.\s+\S/u.test(text) &&
     text.length <= 300 &&
@@ -1362,7 +1605,6 @@ function processTable(tbl: Element, rules: Rules, state: State) {
   const zone = state.zone;
   if (zone !== "chapters" && zone !== "references") return;
 
-  // Remove empty cell paragraphs
   Array.from(tbl.querySelectorAll("tc")).forEach((tc) => {
     if (tc.namespaceURI !== W_NS) return;
     const cellParas = Array.from(tc.querySelectorAll("p")).filter(
@@ -1374,18 +1616,17 @@ function processTable(tbl: Element, rules: Rules, state: State) {
         .join("");
       return t !== "" || p.querySelectorAll("drawing, pict").length > 0;
     });
-    if (nonEmpty.length > 0) {
-      cellParas.forEach((cp) => {
-        const t = Array.from(cp.querySelectorAll("t"))
-          .map((e) => (e.textContent ?? "").trim())
-          .join("");
-        const hasDrawing = cp.querySelectorAll("drawing, pict").length > 0;
-        if (t === "" && !hasDrawing) cp.parentElement?.removeChild(cp);
-      });
-    }
+    cellParas.forEach((cp) => {
+      if (cp === cellParas[cellParas.length - 1] && nonEmpty.length === 0)
+        return;
+      const t = Array.from(cp.querySelectorAll("t"))
+        .map((e) => (e.textContent ?? "").trim())
+        .join("");
+      const hasDrawing = cp.querySelectorAll("drawing, pict").length > 0;
+      if (t === "" && !hasDrawing) cp.parentElement?.removeChild(cp);
+    });
   });
 
-  // Remove empty rows
   const allRows = Array.from(tbl.querySelectorAll("tr")).filter(
     (r) => r.namespaceURI === W_NS,
   );
@@ -1400,12 +1641,10 @@ function processTable(tbl: Element, rules: Rules, state: State) {
 
   deFloatTable(tbl);
 
-  // Remove fixed row heights
   Array.from(tbl.querySelectorAll("trHeight")).forEach((trH) => {
     if (trH.namespaceURI === W_NS) trH.parentElement?.removeChild(trH);
   });
 
-  // Full width
   const tblPrW = ensureChild(tbl, "tblPr");
   removeChildren(tblPrW, "tblW");
   const tblW = wElem(tbl.ownerDocument!, "tblW");
@@ -1451,9 +1690,7 @@ function processParagraph(p: Element, rules: Rules, state: State) {
   const chapterMatch = normalized.match(/^chapter\s+([ivxlcdm]+|\d+)$/iu);
   const isChapterLabel = chapterMatch !== null;
   const isReferences = /^references$/iu.test(normalized);
-  const isAppendixLabel = /^appendix(?:es)?(\s+[a-zA-Z0-9])?$/iu.test(
-    normalized,
-  );
+  const isAppendixLabel = /^appendi(?:x|ces|xes)$/iu.test(normalized);
 
   if (isChapterLabel) {
     state.zone = "chapters";
@@ -1525,7 +1762,9 @@ function processParagraph(p: Element, rules: Rules, state: State) {
       !hasDrawing &&
       !isFigureCaption &&
       !isTableCaption &&
-      !hasNumbering
+      !hasNumbering &&
+      normalized.length <= 200 &&
+      !/[.?!]$/.test(normalized)
     ) {
       state.expectChapterTitle = false;
       state.isFirstParagraph = true;
@@ -1535,27 +1774,20 @@ function processParagraph(p: Element, rules: Rules, state: State) {
     }
     if (isReferences) {
       state.afterTable = false;
+      if (p.parentElement) {
+        p.parentElement.insertBefore(
+          buildZeroHeightPageBreakP(p.ownerDocument!),
+          p,
+        );
+      }
       applyReferencesTitle(p, rules);
       return;
     }
     state.afterTable = false;
-    applyChapterTitle(p, rules);
+    applyCorrectHeading();
     return;
   }
 
-  if (
-    state.expectChapterTitle &&
-    !hasDrawing &&
-    !isFigureCaption &&
-    !isTableCaption &&
-    !hasNumbering
-  ) {
-    state.expectChapterTitle = false;
-    state.isFirstParagraph = true;
-    state.afterTable = false;
-    applyChapterTitle(p, rules);
-    return;
-  }
   if (isChapterLabel) {
     state.afterTable = false;
     applyChapterLabel(p, rules);
@@ -1563,7 +1795,28 @@ function processParagraph(p: Element, rules: Rules, state: State) {
   }
   if (isReferences) {
     state.afterTable = false;
+    if (p.parentElement) {
+      p.parentElement.insertBefore(
+        buildZeroHeightPageBreakP(p.ownerDocument!),
+        p,
+      );
+    }
     applyReferencesTitle(p, rules);
+    return;
+  }
+  if (
+    state.expectChapterTitle &&
+    !hasDrawing &&
+    !isFigureCaption &&
+    !isTableCaption &&
+    !hasNumbering &&
+    normalized.length <= 200 &&
+    !/[.?!]$/.test(normalized)
+  ) {
+    state.expectChapterTitle = false;
+    state.isFirstParagraph = true;
+    state.afterTable = false;
+    applyChapterTitle(p, rules);
     return;
   }
 
@@ -1571,6 +1824,30 @@ function processParagraph(p: Element, rules: Rules, state: State) {
 
   if (hasDrawing) {
     state.afterTable = false;
+    // Move any text runs that are sitting beside the drawing into a new paragraph below
+    if (p.parentElement) {
+      const textRuns = Array.from(p.childNodes).filter(
+        (c): c is Element =>
+          c instanceof Element &&
+          c.localName === "r" &&
+          c.namespaceURI === W_NS &&
+          !Array.from(c.children).some((ch) =>
+            ["drawing", "pict", "instrText", "fldChar"].includes(ch.localName),
+          ) &&
+          (
+            c.getElementsByTagNameNS(W_NS, "t").item(0)?.textContent ?? ""
+          ).trim() !== "",
+      );
+      if (textRuns.length > 0) {
+        const newP = p.ownerDocument!.createElementNS(W_NS, "w:p");
+        textRuns.forEach((r) => {
+          p.removeChild(r);
+          newP.appendChild(r);
+        });
+        p.parentElement.insertBefore(newP, p.nextSibling);
+        applyFigureCaption(newP, rules);
+      }
+    }
     applyFigureParagraph(p, rules);
     return;
   }
@@ -1578,7 +1855,6 @@ function processParagraph(p: Element, rules: Rules, state: State) {
     applyFigureCaption(p, rules);
     return;
   }
-
   if (isTableCaption) {
     const m = normalized.match(/^table\s+([\d]+[\-\.][\d]+)\b/iu);
     if (m) state.lastTableNumber = m[1];
@@ -1603,7 +1879,40 @@ function processParagraph(p: Element, rules: Rules, state: State) {
 
   const ch = state.currentChapter;
 
-  if (/^\d+\.\d+(\.\d+)*(\s+\S.*)?$/u.test(normalized)) {
+  // In chapter 1, \d+.\d+ patterns are sub-items of research objectives (not headings)
+  if (ch === 1 && /^\d+\.\d+(\.\d+)*(\s+\S.*)?$/u.test(normalized)) {
+    const runs = Array.from(p.childNodes).filter(
+      (c): c is Element =>
+        c instanceof Element && c.localName === "r" && c.namespaceURI === W_NS,
+    );
+    for (const run of runs) {
+      const tEl = run
+        .getElementsByTagNameNS(W_NS, "t")
+        .item(0) as Element | null;
+      if (!tEl) continue;
+      const txt = tEl.textContent ?? "";
+      const fixed = txt
+        .replace(/^(\d+\.\d+(\.\d+)*)(\s)/, "$1.$3")
+        .replace(/^(\d+\.\d+(\.\d+)*)$/, "$1.");
+      if (fixed !== txt) tEl.textContent = fixed;
+      break;
+    }
+    stripAll(p);
+    stripLeadingTabRuns(p);
+    stripLeadingArrowRuns(p);
+    stripLeadingTextWhitespace(p);
+    stripTrailingTextWhitespace(p);
+    if (rules.alignment) writePAlignment(p, "both");
+    writePHangingIndent(p, 1440, 720);
+    writePSpacing(p, 0, 0, 480);
+    writeRuns(p, "Garamond", 24, false, false);
+    writePPrRPr(p, "Garamond", 24, false, false);
+    state.afterTable = false;
+    return;
+  }
+
+  // Numbered section headings like 4.1, 4.2 — only in chapters 2–5, not chapter 1
+  if (ch >= 2 && /^\d+\.\d+(\.\d+)*(\s+\S.*)?$/u.test(normalized)) {
     state.afterTable = false;
     applyCorrectHeading();
     return;
@@ -1649,6 +1958,33 @@ function processParagraph(p: Element, rules: Rules, state: State) {
   }
 
   if (hasNumbering || styleId === "ListParagraph") {
+    if (ch === 1) return;
+    // In chapters 4 and 5, "N. Text." followed by a body paragraph is a heading.
+    if (
+      [4, 5].includes(ch) &&
+      /^\d+\.\s+\S/u.test(normalized) &&
+      /\.$/.test(normalized)
+    ) {
+      // Peek at the next non-empty sibling — if it's a plain body paragraph
+      // (no numbering), this is a heading, not a list item.
+      let next = p.nextSibling as Element | null;
+      while (
+        next instanceof Element &&
+        next.localName === "p" &&
+        normalizeText(getParagraphText(next)) === ""
+      ) {
+        next = next.nextSibling as Element | null;
+      }
+      const nextHasNumbering =
+        next instanceof Element &&
+        next.localName === "p" &&
+        next.querySelectorAll("pPr > numPr").length > 0;
+      if (!nextHasNumbering) {
+        state.afterTable = false;
+        applyCorrectHeading();
+        return;
+      }
+    }
     state.afterTable = false;
     applyListParagraph(p, rules);
     return;
@@ -1715,7 +2051,6 @@ function hoistTableCaptions(body: Element, children: Element[]) {
 // ─── table continuation pre-pass ─────────────────────────────────────────────
 
 function handleTableContinuation(body: Element, children: Element[]) {
-  // Remove tblHeader from all tables in scope
   children.forEach((child) => {
     if (child.localName !== "tbl") return;
     Array.from(child.querySelectorAll("tblHeader")).forEach((th) => {
@@ -1741,7 +2076,6 @@ function handleTableContinuation(body: Element, children: Element[]) {
     if (child.localName !== "tbl") continue;
     if (!child.parentElement) continue;
 
-    // Check if continuation label already exists
     let alreadyHasLabel = false;
     for (let k = i + 1; k < children.length; k++) {
       const sib = children[k];
@@ -1812,7 +2146,6 @@ function handleTableContinuation(body: Element, children: Element[]) {
     if (!nextTbl) continue;
 
     if (!hasExplicitBreak) {
-      // Merge two adjacent tables
       const rows2 = Array.from(nextTbl.querySelectorAll("tr")).filter(
         (r) => r.namespaceURI === W_NS,
       );
@@ -1849,7 +2182,6 @@ export async function formatDocx(
   const zip = await JSZip.loadAsync(arrayBuffer);
   const xmlStr: string = await zip.file("word/document.xml").async("string");
 
-  // Parse
   const parser = new DOMParser();
   const dom = parser.parseFromString(xmlStr, "application/xml");
 
@@ -1861,34 +2193,37 @@ export async function formatDocx(
     (rules as any)[r] = true;
   }
 
-  // Build allChildren array
+  // Pre-pass: unwrap all w:sdt content controls
+  unwrapContentControls(body);
+
   const allChildren = Array.from(body.childNodes).filter(
     (c): c is Element => c instanceof Element,
   );
 
-  // Find chapter start and appendix end
   let chapterStart = -1;
   let appendixEnd = allChildren.length;
 
   for (let idx = 0; idx < allChildren.length; idx++) {
     const child = allChildren[idx];
     if (child.localName !== "p") continue;
-    const t = normalizeText(
+    // Use both txbxContent-aware and raw text to catch all cases
+    const t = normalizeText(getParagraphText(child));
+    const tRaw = normalizeText(
       Array.from(child.querySelectorAll("t"))
         .map((n) => n.textContent ?? "")
         .join(""),
     );
-    if (chapterStart === -1 && /^chapter\s+([ivxlcdm]+|\d+)$/iu.test(t)) {
+    const text = t || tRaw;
+    if (chapterStart === -1 && /^chapter\s+([ivxlcdm]+|\d+)$/iu.test(text)) {
       chapterStart = idx;
     }
-    if (chapterStart !== -1 && /^appendix(?:es)?(\s+[a-zA-Z0-9])?$/iu.test(t)) {
+    if (chapterStart !== -1 && /^appendi(?:x|ces|xes)$/iu.test(text)) {
       appendixEnd = idx;
       break;
     }
   }
 
   if (chapterStart === -1) {
-    // Nothing to format
     const serializer = new XMLSerializer();
     const newXml = serializer.serializeToString(dom);
     zip.file("word/document.xml", newXml);
@@ -1898,10 +2233,8 @@ export async function formatDocx(
 
   const scopedChildren = allChildren.slice(chapterStart, appendixEnd);
 
-  // Pre-pass A: hoist table captions
   hoistTableCaptions(body, scopedChildren);
 
-  // Pre-pass B: table continuation
   if (rules.continuation) {
     handleTableContinuation(body, scopedChildren);
   }
@@ -1917,7 +2250,7 @@ export async function formatDocx(
 
   for (const child of scopedChildren) {
     if (!(child instanceof Element)) continue;
-    if (child.parentElement !== body) continue; // might have been moved
+    if (child.parentElement !== body) continue;
     if (child.localName === "p") {
       processParagraph(child, rules, state);
     } else if (child.localName === "tbl") {

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { formatDocx } from "./lib/FormatterEngine";
+import { formatPreliminary } from "./lib/PreliminaryEngine";
 import { RULES_DEF } from "./constants";
 import type { ToastMsg } from "./constants";
 import Sidebar from "./components/Sidebar";
@@ -46,6 +47,7 @@ export default function App() {
 
   // ── sections ───────────────────────────────────────────────────
   const [selectedSections, setSelectedSections] = useState<string[]>([
+    "preliminary",
     "chapters",
   ]);
 
@@ -94,11 +96,28 @@ export default function App() {
     if (!file || !jsZipReady || processing) return;
     setProcessing(true);
     try {
-      const ab = await file.arrayBuffer();
-      const blob = await formatDocx(ab, {
-        sections: selectedSections,
-        rules: enabledRules,
-      });
+      let ab = await file.arrayBuffer();
+      let blob: Blob;
+
+      const runPreliminary = selectedSections.includes("preliminary");
+      const runChapters = selectedSections.includes("chapters");
+
+      if (runPreliminary && runChapters) {
+        // Run both engines: preliminary first, then chapters on the result
+        blob = await formatPreliminary(ab);
+        const ab2 = await blob.arrayBuffer();
+        blob = await formatDocx(ab2, {
+          sections: selectedSections,
+          rules: enabledRules,
+        });
+      } else if (runPreliminary) {
+        blob = await formatPreliminary(ab);
+      } else {
+        blob = await formatDocx(ab, {
+          sections: selectedSections,
+          rules: enabledRules,
+        });
+      }
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       const safeName = file.name.replace(/\.docx$/i, "") + "_formatted.docx";
@@ -381,34 +400,34 @@ export default function App() {
                 </p>
                 <div className="mt-4 space-y-2.5">
                   <div
-                    className="rounded-2xl border p-4 transition-colors"
+                    className="rounded-2xl border-2 p-4 transition-colors"
                     style={{
-                      background: "var(--surface-raised)",
-                      borderColor: "var(--border)",
+                      background: "var(--accent-subtle)",
+                      borderColor: "var(--accent)",
                     }}
                   >
                     <h3
                       className="text-sm font-semibold"
-                      style={{ color: "var(--text-secondary)" }}
+                      style={{ color: "var(--text-primary)" }}
                     >
                       <i
                         className="fa-solid fa-file-circle-check mr-1.5"
-                        style={{ color: "var(--text-muted)" }}
+                        style={{ color: "var(--accent)" }}
                       />
                       Preliminary Pages
                       <span
                         className="ml-2 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase"
                         style={{
-                          background: "var(--surface)",
-                          color: "var(--text-muted)",
+                          background: "var(--accent-subtle-strong)",
+                          color: "var(--accent)",
                         }}
                       >
-                        Soon
+                        Active
                       </span>
                     </h3>
                     <p
                       className="mt-1 text-xs"
-                      style={{ color: "var(--text-muted)" }}
+                      style={{ color: "var(--text-secondary)" }}
                     >
                       Title page, approval sheet, abstract, acknowledgement.
                     </p>

@@ -123,7 +123,7 @@ export default function StatusPanel({
           }}
         >
           <StepIcon done={fileDone} active={!fileDone && sectionDone} num={2} />
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 overflow-hidden">
             <p className="text-xs font-semibold">Manuscript uploaded</p>
             <p
               className="text-[11px] mt-0.5 truncate"

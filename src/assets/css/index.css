@@ -48,6 +48,10 @@
   --sb-thumb-hover: #718096;
 }
 
+html,
+body {
+  overflow-x: clip;
+}
 html {
   background: #f0f4ff;
 }
