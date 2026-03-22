@@ -184,7 +184,7 @@ export default function App() {
         <header className="mb-4 flex items-center justify-between lg:hidden">
           <div className="flex items-center gap-2">
             <img
-              src="/images/logo.png"
+              src="/images/logo.webp"
               alt="Thesis Formatter"
               className="h-8 w-8 object-contain rounded-xl"
             />
@@ -225,10 +225,16 @@ export default function App() {
             </button>
             <button
               onClick={() => setMobileSheetOpen(true)}
-              className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold text-white shadow-md transition active:scale-95"
-              style={{ background: "var(--accent)" }}
+              className="flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-bold transition active:scale-95"
+              style={{
+                background: "var(--accent-subtle)",
+                border: "1.5px solid var(--accent-muted)",
+                color: "var(--accent)",
+                boxShadow: "0 0 0 0 transparent",
+              }}
             >
-              <i className="fa-solid fa-sliders text-sm" /> Options
+              <i className="fa-solid fa-sliders text-sm" />
+              Options
             </button>
           </div>
         </header>
@@ -265,7 +271,7 @@ export default function App() {
                     style={{ color: "var(--accent)" }}
                   >
                     <img
-                      src="/images/logo.png"
+                      src="/images/logo.webp"
                       alt=""
                       className="inline-block h-4 w-4 object-contain mr-1 align-middle rounded"
                     />
@@ -273,7 +279,7 @@ export default function App() {
                   </p>
                   <p
                     className="mt-2 text-sm leading-7"
-                    style={{ color: "var(--text-secondary)" }}
+                    style={{ color: "rgba(255,255,255,0.65)" }}
                   >
                     Upload your manuscript and apply formatting rules for
                     chapters, references, figures, tables, and captions.
@@ -286,7 +292,7 @@ export default function App() {
                     className="inline-flex items-center gap-1.5 rounded-2xl border px-4 py-2.5 text-xs font-semibold transition hover:opacity-80"
                     style={{
                       borderColor: "var(--border)",
-                      color: "var(--text-secondary)",
+                      color: "rgba(255,255,255,0.65)",
                       background: "var(--surface-raised)",
                     }}
                   >
@@ -301,7 +307,7 @@ export default function App() {
                     className="inline-flex items-center gap-1.5 rounded-2xl border px-4 py-2.5 text-xs font-semibold transition hover:opacity-80"
                     style={{
                       borderColor: "var(--border)",
-                      color: "var(--text-secondary)",
+                      color: "rgba(255,255,255,0.65)",
                       background: "var(--surface-raised)",
                     }}
                   >
@@ -317,7 +323,7 @@ export default function App() {
               <div className="mt-4 flex items-center gap-2">
                 <span
                   className="text-xs font-medium"
-                  style={{ color: "var(--text-muted)" }}
+                  style={{ color: "rgba(255,255,255,0.65)" }}
                 >
                   Formatting:
                 </span>
@@ -417,7 +423,7 @@ export default function App() {
                 </h2>
                 <p
                   className="mt-1.5 text-sm"
-                  style={{ color: "var(--text-muted)" }}
+                  style={{ color: "rgba(255,255,255,0.65)" }}
                 >
                   Normalizes document sections per the master template.
                 </p>

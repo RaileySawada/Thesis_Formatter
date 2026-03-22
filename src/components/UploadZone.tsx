@@ -74,7 +74,7 @@ export default function UploadZone({ file, setFile }: Props) {
             </h3>
             <p
               className="mt-1.5 text-sm"
-              style={{ color: "var(--text-secondary)" }}
+              style={{ color: "rgba(255,255,255,0.65)" }}
             >
               Drag &amp; drop your{" "}
               <span
@@ -85,7 +85,10 @@ export default function UploadZone({ file, setFile }: Props) {
               </span>{" "}
               file, or click to browse
             </p>
-            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+            <p
+              className="mt-1 text-xs"
+              style={{ color: "rgba(255,255,255,0.65)" }}
+            >
               Microsoft Word Document (.docx)
             </p>
           </div>
