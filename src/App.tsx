@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { formatDocx } from "./lib/FormatterEngine";
 import { formatPreliminary } from "./lib/PreliminaryEngine";
+import { formatAppendices } from "./lib/AppendicesEngine";
 import { RULES_DEF } from "./constants";
 import type { ToastMsg } from "./constants";
 import Sidebar from "./components/Sidebar";
@@ -49,6 +50,7 @@ export default function App() {
   const [selectedSections, setSelectedSections] = useState<string[]>([
     "preliminary",
     "chapters",
+    "appendices",
   ]);
 
   const toggleSection = useCallback((val: string) => {
@@ -96,28 +98,33 @@ export default function App() {
     if (!file || !jsZipReady || processing) return;
     setProcessing(true);
     try {
-      let ab = await file.arrayBuffer();
-      let blob: Blob;
-
       const runPreliminary = selectedSections.includes("preliminary");
       const runChapters = selectedSections.includes("chapters");
+      const runAppendices = selectedSections.includes("appendices");
 
-      if (runPreliminary && runChapters) {
-        // Run both engines: preliminary first, then chapters on the result
-        blob = await formatPreliminary(ab);
-        const ab2 = await blob.arrayBuffer();
-        blob = await formatDocx(ab2, {
-          sections: selectedSections,
-          rules: enabledRules,
-        });
-      } else if (runPreliminary) {
-        blob = await formatPreliminary(ab);
-      } else {
-        blob = await formatDocx(ab, {
-          sections: selectedSections,
-          rules: enabledRules,
-        });
+      // Pipeline: each engine receives the output of the previous one
+      let currentBuffer = await file.arrayBuffer();
+      let blob: Blob | null = null;
+
+      if (runPreliminary) {
+        blob = await formatPreliminary(currentBuffer);
+        currentBuffer = await blob.arrayBuffer();
       }
+
+      if (runChapters) {
+        blob = await formatDocx(currentBuffer, {
+          sections: selectedSections,
+          rules: enabledRules,
+        });
+        currentBuffer = await blob.arrayBuffer();
+      }
+
+      if (runAppendices) {
+        blob = await formatAppendices(currentBuffer);
+      }
+
+      if (!blob) blob = new Blob([currentBuffer]);
+
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       const safeName = file.name.replace(/\.docx$/i, "") + "_formatted.docx";
@@ -273,6 +280,22 @@ export default function App() {
                   </p>
                 </div>
                 <div className="flex shrink-0 gap-2">
+                  <a
+                    href="/template/manuscript_template.docx"
+                    download="manuscript_template.docx"
+                    className="inline-flex items-center gap-1.5 rounded-2xl border px-4 py-2.5 text-xs font-semibold transition hover:opacity-80"
+                    style={{
+                      borderColor: "var(--border)",
+                      color: "var(--text-secondary)",
+                      background: "var(--surface-raised)",
+                    }}
+                  >
+                    <i
+                      className="fa-solid fa-file-arrow-down text-xs"
+                      style={{ color: "var(--accent)" }}
+                    />{" "}
+                    Template
+                  </a>
                   <button
                     onClick={() => setPreviewOpen(true)}
                     className="inline-flex items-center gap-1.5 rounded-2xl border px-4 py-2.5 text-xs font-semibold transition hover:opacity-80"
@@ -399,106 +422,85 @@ export default function App() {
                   Normalizes document sections per the master template.
                 </p>
                 <div className="mt-4 space-y-2.5">
-                  <div
-                    className="rounded-2xl border-2 p-4 transition-colors"
-                    style={{
-                      background: "var(--accent-subtle)",
-                      borderColor: "var(--accent)",
-                    }}
-                  >
-                    <h3
-                      className="text-sm font-semibold"
-                      style={{ color: "var(--text-primary)" }}
-                    >
-                      <i
-                        className="fa-solid fa-file-circle-check mr-1.5"
-                        style={{ color: "var(--accent)" }}
-                      />
-                      Preliminary Pages
-                      <span
-                        className="ml-2 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase"
-                        style={{
-                          background: "var(--accent-subtle-strong)",
-                          color: "var(--accent)",
-                        }}
+                  {[
+                    {
+                      key: "preliminary",
+                      icon: "fa-file-circle-check",
+                      label: "Preliminary Pages",
+                      desc: "Title page, approval sheet, abstract, acknowledgement.",
+                    },
+                    {
+                      key: "chapters",
+                      icon: "fa-book-open",
+                      label: "Chapters and References",
+                      desc: "Chapter titles, headings, body text, figures, tables, captions, legends, references.",
+                    },
+                    {
+                      key: "appendices",
+                      icon: "fa-paperclip",
+                      label: "Appendices",
+                      desc: "Appendix labels, continuation blocks, User Manual, CV.",
+                    },
+                  ].map(({ key, icon, label, desc }) => {
+                    const active = selectedSections.includes(key);
+                    return (
+                      <div
+                        key={key}
+                        className="rounded-2xl border-2 p-4 transition-colors"
+                        style={
+                          active
+                            ? {
+                                background: "var(--accent-subtle)",
+                                borderColor: "var(--accent)",
+                              }
+                            : {
+                                background: "var(--surface-raised)",
+                                borderColor: "var(--border)",
+                              }
+                        }
                       >
-                        Active
-                      </span>
-                    </h3>
-                    <p
-                      className="mt-1 text-xs"
-                      style={{ color: "var(--text-secondary)" }}
-                    >
-                      Title page, approval sheet, abstract, acknowledgement.
-                    </p>
-                  </div>
-                  <div
-                    className="rounded-2xl border-2 p-4 transition-colors"
-                    style={{
-                      background: "var(--accent-subtle)",
-                      borderColor: "var(--accent)",
-                    }}
-                  >
-                    <h3
-                      className="text-sm font-semibold"
-                      style={{ color: "var(--text-primary)" }}
-                    >
-                      <i
-                        className="fa-solid fa-book-open mr-1.5"
-                        style={{ color: "var(--accent)" }}
-                      />
-                      Chapters and References
-                      <span
-                        className="ml-2 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase"
-                        style={{
-                          background: "var(--accent-subtle-strong)",
-                          color: "var(--accent)",
-                        }}
-                      >
-                        Active
-                      </span>
-                    </h3>
-                    <p
-                      className="mt-1 text-xs"
-                      style={{ color: "var(--text-secondary)" }}
-                    >
-                      Chapter titles, headings, body text, figures, tables,
-                      captions, legends, references.
-                    </p>
-                  </div>
-                  <div
-                    className="rounded-2xl border p-4 transition-colors"
-                    style={{
-                      background: "var(--surface-raised)",
-                      borderColor: "var(--border)",
-                    }}
-                  >
-                    <h3
-                      className="text-sm font-semibold"
-                      style={{ color: "var(--text-secondary)" }}
-                    >
-                      <i
-                        className="fa-solid fa-paperclip mr-1.5"
-                        style={{ color: "var(--text-muted)" }}
-                      />
-                      Appendices
-                      <span
-                        className="ml-2 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase"
-                        style={{
-                          background: "var(--surface)",
-                          color: "var(--text-muted)",
-                        }}
-                      >
-                        Soon
-                      </span>
-                    </h3>
-                    <p
-                      className="mt-1 text-xs"
-                      style={{ color: "var(--text-muted)" }}
-                    >
-                      Appendix labels, continuation blocks, CV.
-                    </p>
-                  </div>
+                        <h3
+                          className="text-sm font-semibold"
+                          style={{
+                            color: active
+                              ? "var(--text-primary)"
+                              : "var(--text-secondary)",
+                          }}
+                        >
+                          <i
+                            className={`fa-solid ${icon} mr-1.5`}
+                            style={{
+                              color: active
+                                ? "var(--accent)"
+                                : "var(--text-muted)",
+                            }}
+                          />
+                          {label}
+                          {active && (
+                            <span
+                              className="ml-2 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase"
+                              style={{
+                                background: "var(--accent-subtle-strong)",
+                                color: "var(--accent)",
+                              }}
+                            >
+                              Active
+                            </span>
+                          )}
+                        </h3>
+                        <p
+                          className="mt-1 text-xs"
+                          style={{
+                            color: active
+                              ? "var(--text-secondary)"
+                              : "var(--text-muted)",
+                          }}
+                        >
+                          {desc}
+                        </p>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 

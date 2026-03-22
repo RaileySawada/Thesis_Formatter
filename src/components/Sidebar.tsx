@@ -31,7 +31,7 @@ const SECTIONS = [
     label: "Appendices",
     sub: "Appendix headings, labels, CV",
     icon: "fa-paperclip",
-    disabled: true,
+    disabled: false,
   },
 ];
 
@@ -122,13 +122,31 @@ export default function Sidebar({
         </div>
       </div>
 
-      {/* Main Sections */}
+      {/* Download Template */}
+      <a
+        href="/assets/template/manuscript_template.docx"
+        download="manuscript_template.docx"
+        className="flex items-center justify-center gap-2 rounded-2xl border px-4 py-2.5 text-xs font-semibold transition hover:opacity-80"
+        style={{
+          borderColor: "var(--border)",
+          background: "var(--surface-raised)",
+          color: "var(--text-secondary)",
+        }}
+      >
+        <i
+          className="fa-solid fa-file-arrow-down"
+          style={{ color: "var(--accent)" }}
+        />
+        Download Template
+      </a>
+
+      {/* Options */}
       <div>
         <p
           className="mb-2.5 text-[10px] font-bold uppercase tracking-[0.18em]"
           style={{ color: "var(--text-muted)" }}
         >
-          <i className="fa-solid fa-layer-group mr-1" /> Main Sections
+          <i className="fa-solid fa-sliders mr-1" /> Options
         </p>
         <div className="space-y-2">
           {SECTIONS.map((sec) => {
