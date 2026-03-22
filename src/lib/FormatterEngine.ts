@@ -1959,6 +1959,47 @@ function processParagraph(p: Element, rules: Rules, state: State) {
 
   if (hasNumbering || styleId === "ListParagraph") {
     if (ch === 1) return;
+    // In chapters 4 and 5, if ANY text run is set to Garamond sz=26 (13 pt),
+    // the user manually applied heading formatting — treat it as a heading
+    // while keeping the original numbering (numPr) intact.
+    if ([4, 5].includes(ch)) {
+      const textRuns = Array.from(p.querySelectorAll("r"))
+        .filter((r) => r.namespaceURI === W_NS)
+        .filter(
+          (r) =>
+            !Array.from(r.children).some((c) =>
+              ["drawing", "pict", "instrText", "fldChar"].includes(c.localName),
+            ),
+        );
+      const hasGaramond13 = textRuns.some((run) => {
+        const rPr = getChild(run, "rPr");
+        if (!rPr) return false;
+        const rFonts = getChild(rPr, "rFonts");
+        const font = rFonts ? wAttr(rFonts, "ascii") : "";
+        const szEl = rPr
+          .getElementsByTagNameNS(W_NS, "sz")
+          .item(0) as Element | null;
+        return (
+          font === "Garamond" && szEl != null && wAttr(szEl, "val") === "26"
+        );
+      });
+      if (hasGaramond13) {
+        // Save numPr before applyCorrectHeading → stripAll removes it
+        const pPrEl = getChild(p, "pPr");
+        const savedNumPr = pPrEl
+          ? (getChild(pPrEl, "numPr")?.cloneNode(true) as Element | undefined)
+          : undefined;
+        state.afterTable = false;
+        applyCorrectHeading();
+        // Restore numPr so the user's numbering is preserved
+        if (savedNumPr) {
+          const pPrAfter = ensurePPr(p);
+          removeChildren(pPrAfter, "numPr");
+          pPrAfter.insertBefore(savedNumPr, pPrAfter.firstChild);
+        }
+        return;
+      }
+    }
     // In chapters 4 and 5, "N. Text." followed by a body paragraph is a heading.
     if (
       [4, 5].includes(ch) &&
