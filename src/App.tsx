@@ -123,7 +123,10 @@ export default function App() {
         blob = await formatAppendices(currentBuffer);
       }
 
-      if (!blob) blob = new Blob([currentBuffer]);
+      const docxMime =
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+      if (!blob) blob = new Blob([currentBuffer], { type: docxMime });
+      else blob = new Blob([await blob.arrayBuffer()], { type: docxMime });
 
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -279,7 +282,7 @@ export default function App() {
                   </p>
                   <p
                     className="mt-2 text-sm leading-7"
-                    style={{ color: "rgba(255,255,255,0.65)" }}
+                    style={{ color: "var(--text-soft)" }}
                   >
                     Upload your manuscript and apply formatting rules for
                     chapters, references, figures, tables, and captions.
@@ -292,7 +295,7 @@ export default function App() {
                     className="inline-flex items-center gap-1.5 rounded-2xl border px-4 py-2.5 text-xs font-semibold transition hover:opacity-80"
                     style={{
                       borderColor: "var(--border)",
-                      color: "rgba(255,255,255,0.65)",
+                      color: "var(--text-soft)",
                       background: "var(--surface-raised)",
                     }}
                   >
@@ -307,7 +310,7 @@ export default function App() {
                     className="inline-flex items-center gap-1.5 rounded-2xl border px-4 py-2.5 text-xs font-semibold transition hover:opacity-80"
                     style={{
                       borderColor: "var(--border)",
-                      color: "rgba(255,255,255,0.65)",
+                      color: "var(--text-soft)",
                       background: "var(--surface-raised)",
                     }}
                   >
@@ -323,7 +326,7 @@ export default function App() {
               <div className="mt-4 flex items-center gap-2">
                 <span
                   className="text-xs font-medium"
-                  style={{ color: "rgba(255,255,255,0.65)" }}
+                  style={{ color: "var(--text-soft)" }}
                 >
                   Formatting:
                 </span>
@@ -423,7 +426,7 @@ export default function App() {
                 </h2>
                 <p
                   className="mt-1.5 text-sm"
-                  style={{ color: "rgba(255,255,255,0.65)" }}
+                  style={{ color: "var(--text-soft)" }}
                 >
                   Normalizes document sections per the master template.
                 </p>

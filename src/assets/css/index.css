@@ -16,6 +16,7 @@
   --text-primary: #0f172a;
   --text-secondary: #475569;
   --text-muted: #94a3b8;
+  --text-soft: #64748b;
   --status-bg: #1e293b;
   --shadow: 0 4px 24px rgba(15, 23, 42, 0.07);
   --blob-1: #93c5fd;
@@ -39,6 +40,7 @@
   --text-primary: #e6edf3;
   --text-secondary: #8b949e;
   --text-muted: #484f58;
+  --text-soft: rgba(255, 255, 255, 0.65);
   --status-bg: #0d1117;
   --shadow: 0 4px 32px rgba(0, 0, 0, 0.5);
   --blob-1: #1d4ed8;

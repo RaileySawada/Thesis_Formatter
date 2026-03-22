@@ -283,22 +283,6 @@ export default function MobileSheet({
           className="shrink-0 border-t px-5 py-4"
           style={{ borderColor: "var(--border)", background: "var(--surface)" }}
         >
-          <a
-            href="/assets/template/manuscript_template.docx"
-            download="manuscript_template.docx"
-            className="mb-2 flex w-full items-center justify-center gap-2 rounded-2xl border py-3 text-sm font-semibold transition hover:opacity-80"
-            style={{
-              borderColor: "var(--border)",
-              background: "var(--surface-raised)",
-              color: "var(--text-secondary)",
-            }}
-          >
-            <i
-              className="fa-solid fa-file-arrow-down"
-              style={{ color: "var(--accent)" }}
-            />
-            Download Template
-          </a>
           <button
             type="button"
             onClick={handleClose}

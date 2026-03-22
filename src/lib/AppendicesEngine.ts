@@ -414,6 +414,7 @@ function applyAppendixLetter(p: Element, letter: string) {
 
   const pPr = ensurePPr(p);
 
+  removeChildren(pPr, "sectPr");
   pPr.appendChild(wElem(p.ownerDocument!, "pageBreakBefore"));
 
   const jc = wElem(p.ownerDocument!, "jc");
@@ -882,9 +883,6 @@ function buildNormalClosingSectPr(
 
   if (mainSectPr) {
     sectPr = mainSectPr.cloneNode(true) as Element;
-    // Inline sectPrs must not contain headerReference / footerReference
-    removeChildren(sectPr, "headerReference");
-    removeChildren(sectPr, "footerReference");
   } else {
     sectPr = wElem(doc, "sectPr");
     // Default A4 page size if the doc has no sectPr
@@ -1003,9 +1001,6 @@ export async function formatAppendices(
   const body = dom.querySelector("body");
   if (!body) throw new Error("No <body> element found in document.xml");
 
-  unwrapContentControls(body);
-
-  // Collect all direct-child elements
   const allChildren = Array.from(body.childNodes).filter(
     (c): c is Element => c instanceof Element,
   );
@@ -1054,7 +1049,11 @@ export async function formatAppendices(
     return zip.generateAsync({ type: "blob" }) as Promise<Blob>;
   }
 
-  const scopedChildren = allChildren.slice(appendicesStart);
+  allChildren.slice(appendicesStart).forEach((el) => unwrapContentControls(el));
+
+  const scopedChildren = Array.from(body.childNodes)
+    .filter((c): c is Element => c instanceof Element && c !== mainSectPr)
+    .slice(appendicesStart);
 
   // ── PRE-PASS: locate User Manual and CV boundaries ────────────────────────────
   //
@@ -1135,13 +1134,34 @@ export async function formatAppendices(
     // Must be awaited before we build the sectPr so we have the rel IDs ready.
     const { hdrRelId, ftrRelId } = await addEmptyHeaderFooterToZip(zip);
 
-    // User Manual title paragraph closes the normal-appendices section
-    injectSectPr(
-      scopedChildren[userManualTitleIdx] as Element,
-      buildNormalClosingSectPr(dom, mainSectPr),
-    );
+    // Inject sectPr on UM title only if it doesn't already have one.
+    const umTitleEl = scopedChildren[userManualTitleIdx] as Element;
+    const umTitleAlreadyHasSectPr =
+      getChild(ensurePPr(umTitleEl), "sectPr") !== null;
+    if (!umTitleAlreadyHasSectPr) {
+      injectSectPr(umTitleEl, buildNormalClosingSectPr(dom, mainSectPr));
+    }
 
-    // Last User Manual content paragraph closes the special section
+    // Delete empty paragraphs immediately after the UM title — these produce
+    // blank pages. If an empty paragraph carries a sectPr it is a redundant
+    // "Section Break (Next Page)" paragraph left by the source doc; remove it
+    // too since the UM title already has the real section break.
+    for (let k = userManualTitleIdx + 1; k < scopedChildren.length; k++) {
+      const next = scopedChildren[k];
+      if (!(next instanceof Element) || next.localName !== "p") break;
+      const hasText =
+        normalizeText(
+          Array.from(next.querySelectorAll("t"))
+            .map((n) => n.textContent ?? "")
+            .join(""),
+        ) !== "";
+      const hasImg = next.querySelectorAll("drawing, pict").length > 0;
+      if (hasText || hasImg) break;
+      // Empty paragraph (with or without sectPr) — remove it.
+      next.parentElement?.removeChild(next);
+    }
+
+    // Last User Manual content paragraph closes the blank-header section
     if (userManualLastIdx !== -1) {
       injectSectPr(
         scopedChildren[userManualLastIdx] as Element,

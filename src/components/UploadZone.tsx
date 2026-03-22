@@ -72,10 +72,7 @@ export default function UploadZone({ file, setFile }: Props) {
             >
               Upload manuscript
             </h3>
-            <p
-              className="mt-1.5 text-sm"
-              style={{ color: "rgba(255,255,255,0.65)" }}
-            >
+            <p className="mt-1.5 text-sm" style={{ color: "var(--text-soft)" }}>
               Drag &amp; drop your{" "}
               <span
                 className="font-semibold"
@@ -85,10 +82,7 @@ export default function UploadZone({ file, setFile }: Props) {
               </span>{" "}
               file, or click to browse
             </p>
-            <p
-              className="mt-1 text-xs"
-              style={{ color: "rgba(255,255,255,0.65)" }}
-            >
+            <p className="mt-1 text-xs" style={{ color: "var(--text-soft)" }}>
               Microsoft Word Document (.docx)
             </p>
           </div>

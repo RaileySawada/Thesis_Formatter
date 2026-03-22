@@ -85,7 +85,7 @@ export default function Sidebar({
       >
         <p
           className="mb-2.5 text-[10px] font-bold uppercase tracking-[0.18em]"
-          style={{ color: "rgba(255,255,255,0.65)" }}
+          style={{ color: "var(--text-soft)" }}
         >
           <i className="fa-solid fa-palette mr-1" /> Appearance
         </p>
@@ -130,7 +130,7 @@ export default function Sidebar({
         style={{
           borderColor: "var(--border)",
           background: "var(--surface-raised)",
-          color: "rgba(255,255,255,0.65)",
+          color: "var(--text-soft)",
         }}
       >
         <i
@@ -144,7 +144,7 @@ export default function Sidebar({
       <div>
         <p
           className="mb-2.5 text-[10px] font-bold uppercase tracking-[0.18em]"
-          style={{ color: "rgba(255,255,255,0.65)" }}
+          style={{ color: "var(--text-soft)" }}
         >
           <i className="fa-solid fa-sliders mr-1" /> Options
         </p>
@@ -264,7 +264,7 @@ export default function Sidebar({
         >
           <p
             className="text-[10px] font-bold uppercase tracking-[0.18em]"
-            style={{ color: "rgba(255,255,255,0.65)" }}
+            style={{ color: "var(--text-soft)" }}
           >
             <i className="fa-solid fa-gear mr-1" /> Advanced Rules
           </p>
