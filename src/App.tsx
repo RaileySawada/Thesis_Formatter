@@ -292,18 +292,14 @@ export default function App() {
                   <a
                     href="/template/manuscript_template.docx"
                     download="manuscript_template.docx"
-                    className="inline-flex items-center gap-1.5 rounded-2xl border px-4 py-2.5 text-xs font-semibold transition hover:opacity-80"
+                    className="inline-flex items-center gap-1.5 rounded-2xl px-4 py-2.5 text-xs font-bold text-white transition hover:opacity-90 active:scale-95 shadow-md"
                     style={{
-                      borderColor: "var(--border)",
-                      color: "var(--text-soft)",
-                      background: "var(--surface-raised)",
+                      background: "var(--accent)",
+                      boxShadow: "0 4px 12px var(--accent-glow)",
                     }}
                   >
-                    <i
-                      className="fa-solid fa-file-arrow-down text-xs"
-                      style={{ color: "var(--accent)" }}
-                    />{" "}
-                    Template
+                    <i className="fa-solid fa-file-arrow-down text-xs" />{" "}
+                    Download Template
                   </a>
                   <button
                     onClick={() => setPreviewOpen(true)}

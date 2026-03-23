@@ -122,24 +122,6 @@ export default function Sidebar({
         </div>
       </div>
 
-      {/* Download Template */}
-      <a
-        href="/assets/template/manuscript_template.docx"
-        download="manuscript_template.docx"
-        className="flex items-center justify-center gap-2 rounded-2xl border px-4 py-2.5 text-xs font-semibold transition hover:opacity-80"
-        style={{
-          borderColor: "var(--border)",
-          background: "var(--surface-raised)",
-          color: "var(--text-soft)",
-        }}
-      >
-        <i
-          className="fa-solid fa-file-arrow-down"
-          style={{ color: "var(--accent)" }}
-        />
-        Download Template
-      </a>
-
       {/* Options */}
       <div>
         <p
