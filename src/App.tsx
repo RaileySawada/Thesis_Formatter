@@ -657,14 +657,16 @@ export default function App() {
             </div>
 
             {/* Footer mobile */}
-            <p
-              className="text-center text-[11px] pb-2 lg:hidden"
+            <div
+              className="text-center text-xs pb-4 lg:hidden"
               style={{ color: "var(--text-muted)" }}
             >
-              Developed with <span style={{ color: "#ef4444" }}>anger</span> by{" "}
-              <strong style={{ color: "var(--text-secondary)" }}>Railey</strong>{" "}
-              😤
-            </p>
+              <p className="font-semibold">
+                &copy; 2026 City College of Calamba - OVPREPQA. All rights
+                reserved.
+              </p>
+              <p className="mt-1 text-[10px]">Developed by Railey Dela Peña</p>
+            </div>
           </main>
         </div>
       </div>

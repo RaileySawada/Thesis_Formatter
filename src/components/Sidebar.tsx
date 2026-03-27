@@ -395,17 +395,16 @@ export default function Sidebar({
         style={{ borderColor: "var(--border)" }}
       >
         <p
+          className="text-[10px] text-center font-semibold"
+          style={{ color: "var(--text-muted)" }}
+        >
+          &copy; 2026 City College of Calamba - OVPREPQA. All rights reserved.
+        </p>
+        <p
           className="text-[10px] text-center"
           style={{ color: "var(--text-muted)" }}
         >
-          Developed with <span style={{ color: "#ef4444" }}>anger</span> by{" "}
-          <span
-            className="font-bold"
-            style={{ color: "var(--text-secondary)" }}
-          >
-            Railey
-          </span>{" "}
-          😤
+          Developed by Railey Dela Peña
         </p>
       </div>
     </aside>
