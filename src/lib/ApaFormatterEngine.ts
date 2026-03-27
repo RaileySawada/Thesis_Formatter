@@ -1,7 +1,13 @@
 /**
- * FormatterEngine.ts
- * Full client-side port of DocxFormatterService.php
- * Uses JSZip (window.JSZip) + DOMParser for DOCX XML manipulation.
+ * ApaFormatterEngine.ts
+ * APA 7th Edition variant of the chapter/references formatter.
+ *
+ * Key differences from the IEEE FormatterEngine:
+ *  - No italic headings anywhere (Chapter 2 uses the same heading style as all others)
+ *  - Body paragraph runs have italic explicitly forced to false
+ *  - Reference entries strip leading bracketed numbers ([1], [2] …)
+ *  - Reference entries use a hanging indent (left=720, hanging=720 twips),
+ *    Garamond 11 pt, single spacing, no bold / no underline / automatic colour
  */
 
 const W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
@@ -9,10 +15,9 @@ const WP_NS =
   "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing";
 const A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main";
 
-export interface FormatOptions {
+export interface ApaFormatOptions {
   sections: string[];
   rules: string[];
-  citationStyle?: string;
 }
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -223,6 +228,15 @@ function writePPrRPr(
   if (italic) {
     rPr.appendChild(wElem(p.ownerDocument!, "i"));
     rPr.appendChild(wElem(p.ownerDocument!, "iCs"));
+  } else {
+    // Explicitly suppress italic — omitting <w:i> inherits from pStyle/rStyle.
+    // <w:i w:val="0"/> hard-overrides any inherited italic from the style chain.
+    const iEl = wElem(p.ownerDocument!, "i");
+    setWAttr(iEl, "val", "0");
+    rPr.appendChild(iEl);
+    const iCsEl = wElem(p.ownerDocument!, "iCs");
+    setWAttr(iCsEl, "val", "0");
+    rPr.appendChild(iCsEl);
   }
   const szEl = wElem(p.ownerDocument!, "sz");
   setWAttr(szEl, "val", sizeStr);
@@ -317,6 +331,16 @@ function writeRuns(
     if (applyItalic) {
       ensureChild(rPr, "i");
       ensureChild(rPr, "iCs");
+    } else if (italic === false) {
+      // Explicitly suppress italic — omitting <w:i> is not enough because
+      // Word's style cascade (pStyle / rStyle) can still inject italic.
+      // <w:i w:val="0"/> hard-overrides any inherited italic.
+      const iEl = wElem(run.ownerDocument!, "i");
+      setWAttr(iEl, "val", "0");
+      rPr.appendChild(iEl);
+      const iCsEl = wElem(run.ownerDocument!, "iCs");
+      setWAttr(iCsEl, "val", "0");
+      rPr.appendChild(iCsEl);
     }
 
     for (const tag of [
@@ -874,7 +898,8 @@ function applyBodyParagraph(p: Element, rules: Rules, beforeSpacing = 0) {
   writePIndent(p, 720);
   writePSpacing(p, beforeSpacing, 0, 480);
   removePBdr(p);
-  writeRuns(p, "Garamond", 24, null, null);
+  // APA: never italicise body text (pass false, not null)
+  writeRuns(p, "Garamond", 24, null, false);
   writePPrRPr(p, "Garamond", 24, false, false);
 }
 
@@ -883,10 +908,38 @@ function applyReferenceEntry(p: Element, rules: Rules) {
   stripLeadingTabRuns(p);
   stripLeadingArrowRuns(p);
   stripLeadingTextWhitespace(p);
+
+  // APA: strip leading bracketed numbers e.g. "[1] " or "[12] "
+  const runs = Array.from(p.childNodes).filter(
+    (c): c is Element =>
+      c instanceof Element && c.localName === "r" && c.namespaceURI === W_NS,
+  );
+  for (const run of runs) {
+    const hasSpecial = Array.from(run.children).some((c) =>
+      ["drawing", "pict", "instrText", "fldChar"].includes(c.localName),
+    );
+    if (hasSpecial) break;
+    const tEl = run.getElementsByTagNameNS(W_NS, "t").item(0) as Element | null;
+    if (!tEl) continue;
+    const original = tEl.textContent ?? "";
+    const stripped = original.replace(/^\[\d+\]\s*/, "");
+    if (stripped !== original) {
+      if (stripped === "") {
+        p.removeChild(run);
+      } else {
+        tEl.textContent = stripped;
+        tEl.setAttribute("xml:space", "preserve");
+      }
+    }
+    break;
+  }
+
   if (rules.alignment) writePAlignment(p, "both");
+  // APA hanging indent: first line flush left, all subsequent lines indented (720 twips = 1.27 cm ≈ 5 spaces)
   if (rules.indentation) writePHangingIndent(p, 720, 720);
   else writePIndent(p, 0);
-  writePSpacing(p, 0, 0, 240);
+  writePSpacing(p, 0, 0, 240); // single spacing
+  // Garamond 11 pt, no bold, no italic
   writeRuns(p, "Garamond", 22, false, false);
   writePPrRPr(p, "Garamond", 22, false, false);
 }
@@ -1746,10 +1799,9 @@ function processParagraph(p: Element, rules: Rules, state: State) {
     /^continuation\s+of\s+(table|figure)(\s+[\d\-\.]+)?/iu.test(normalized);
   const isLegend = /^legend\s*:/iu.test(normalized);
 
+  // APA: all headings use the same non-italic style regardless of chapter
   const applyCorrectHeading = () => {
-    if (state.currentChapter === 2 && !/^synthesis\b/iu.test(normalized))
-      applyItalicHeading(p, rules);
-    else applyHeading(p, rules);
+    applyHeading(p, rules);
   };
 
   if (styleId === "Heading1") {
@@ -2037,8 +2089,9 @@ function processParagraph(p: Element, rules: Rules, state: State) {
     return;
   }
 
-  const looksLikeItalic =
-    [2, 4, 5].includes(ch) && isItalicHeading(p, normalized);
+  // APA: detect paragraphs that were italic headings in any chapter and reformat
+  // them as standard (non-italic) headings
+  const looksLikeItalic = isItalicHeading(p, normalized);
   const looksLikeHeading = looksLikeItalic || isHeading(p, normalized);
 
   if (looksLikeHeading) {
@@ -2214,9 +2267,9 @@ function handleTableContinuation(body: Element, children: Element[]) {
 
 // ─── main entry ──────────────────────────────────────────────────────────────
 
-export async function formatDocx(
+export async function formatDocxApa(
   arrayBuffer: ArrayBuffer,
-  options: FormatOptions,
+  options: ApaFormatOptions,
 ): Promise<Blob> {
   const JSZip = (window as any).JSZip;
   if (!JSZip) throw new Error("JSZip not loaded");

@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { formatDocx } from "./lib/FormatterEngine";
+import { formatDocxApa } from "./lib/ApaFormatterEngine";
 import { formatPreliminary } from "./lib/PreliminaryEngine";
 import { formatAppendices } from "./lib/AppendicesEngine";
 import { RULES_DEF } from "./constants";
-import type { ToastMsg } from "./constants";
+import type { ToastMsg, CitationStyle } from "./constants";
 import Sidebar from "./components/Sidebar";
 import UploadZone from "./components/UploadZone";
 import StatusPanel from "./components/StatusPanel";
@@ -77,6 +78,7 @@ export default function App() {
   // ── file ───────────────────────────────────────────────────────
   const [file, setFile] = useState<File | null>(null);
   const [rulesOpen, setRulesOpen] = useState(true);
+  const [citationStyle, setCitationStyle] = useState<CitationStyle>("ieee");
 
   // ── modals ─────────────────────────────────────────────────────
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
@@ -112,10 +114,18 @@ export default function App() {
       }
 
       if (runChapters) {
-        blob = await formatDocx(currentBuffer, {
-          sections: selectedSections,
-          rules: enabledRules,
-        });
+        if (citationStyle === "apa") {
+          blob = await formatDocxApa(currentBuffer, {
+            sections: selectedSections,
+            rules: enabledRules,
+          });
+        } else {
+          blob = await formatDocx(currentBuffer, {
+            sections: selectedSections,
+            rules: enabledRules,
+            citationStyle,
+          });
+        }
         currentBuffer = await blob.arrayBuffer();
       }
 
@@ -141,7 +151,15 @@ export default function App() {
     } finally {
       setProcessing(false);
     }
-  }, [file, jsZipReady, processing, selectedSections, enabledRules, showToast]);
+  }, [
+    file,
+    jsZipReady,
+    processing,
+    selectedSections,
+    enabledRules,
+    citationStyle,
+    showToast,
+  ]);
 
   const sectionLabels: Record<string, string> = {
     preliminary: "Preliminary",
@@ -254,6 +272,8 @@ export default function App() {
             toggleRule={toggleRule}
             rulesOpen={rulesOpen}
             setRulesOpen={setRulesOpen}
+            citationStyle={citationStyle}
+            setCitationStyle={setCitationStyle}
           />
 
           {/* Main content */}
@@ -542,6 +562,8 @@ export default function App() {
         toggleRule={toggleRule}
         sectionLabels={sectionLabels}
         sectionIcons={sectionIcons}
+        citationStyle={citationStyle}
+        setCitationStyle={setCitationStyle}
       />
 
       <PreviewModal open={previewOpen} onClose={() => setPreviewOpen(false)} />

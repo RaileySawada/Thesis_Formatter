@@ -1,4 +1,5 @@
-import { RULES_DEF } from "../constants";
+import { RULES_DEF, CITATION_STYLES } from "../constants";
+import type { CitationStyle } from "../constants";
 
 interface Props {
   isDark: boolean;
@@ -9,6 +10,8 @@ interface Props {
   toggleRule: (v: string) => void;
   rulesOpen: boolean;
   setRulesOpen: (v: boolean) => void;
+  citationStyle: CitationStyle;
+  setCitationStyle: (v: CitationStyle) => void;
 }
 
 const SECTIONS = [
@@ -44,6 +47,8 @@ export default function Sidebar({
   toggleRule,
   rulesOpen,
   setRulesOpen,
+  citationStyle,
+  setCitationStyle,
 }: Props) {
   return (
     <aside
@@ -119,6 +124,87 @@ export default function Sidebar({
           >
             <div className="toggle-thumb" />
           </button>
+        </div>
+      </div>
+
+      {/* Citation Style */}
+      <div
+        className="rounded-2xl border px-4 py-3 transition-colors"
+        style={{
+          background: "var(--surface-raised)",
+          borderColor: "var(--border)",
+        }}
+      >
+        <p
+          className="mb-2.5 text-[10px] font-bold uppercase tracking-[0.18em]"
+          style={{ color: "var(--text-soft)" }}
+        >
+          <i className="fa-solid fa-quote-left mr-1" /> Citation Style
+        </p>
+        <div className="flex gap-2">
+          {CITATION_STYLES.map((cs) => {
+            const active = citationStyle === cs.value;
+            return (
+              <button
+                key={cs.value}
+                type="button"
+                onClick={() => setCitationStyle(cs.value)}
+                className="flex-1 flex flex-col items-center gap-1 rounded-xl border-2 px-2 py-2.5 transition-all text-center"
+                style={
+                  active
+                    ? {
+                        borderColor: "var(--accent)",
+                        background: "var(--accent-subtle)",
+                      }
+                    : {
+                        borderColor: "var(--border)",
+                        background: "transparent",
+                      }
+                }
+              >
+                <span
+                  className="flex h-6 w-6 items-center justify-center rounded-lg text-xs"
+                  style={
+                    active
+                      ? {
+                          background: "var(--accent-subtle-strong)",
+                          color: "var(--accent)",
+                        }
+                      : {
+                          background: "var(--surface)",
+                          color: "var(--text-muted)",
+                        }
+                  }
+                >
+                  <i className={`fa-solid ${cs.icon}`} />
+                </span>
+                <span
+                  className="text-xs font-bold leading-tight"
+                  style={{
+                    color: active
+                      ? "var(--text-primary)"
+                      : "var(--text-secondary)",
+                  }}
+                >
+                  {cs.label}
+                </span>
+                <span
+                  className="text-[9px] leading-tight"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  {cs.sub}
+                </span>
+                {active && (
+                  <span
+                    className="mt-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase"
+                    style={{ background: "var(--accent)", color: "#fff" }}
+                  >
+                    Active
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 

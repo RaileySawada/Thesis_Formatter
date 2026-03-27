@@ -13,3 +13,25 @@ export interface ToastMsg {
   msg: string;
   type: "success" | "error";
 }
+
+export type CitationStyle = "ieee" | "apa";
+
+export const CITATION_STYLES: {
+  value: CitationStyle;
+  label: string;
+  sub: string;
+  icon: string;
+}[] = [
+  {
+    value: "ieee",
+    label: "IEEE",
+    sub: "Numbered references [1]",
+    icon: "fa-hashtag",
+  },
+  {
+    value: "apa",
+    label: "APA 7th",
+    sub: "Author-date (Smith, 2024)",
+    icon: "fa-user-pen",
+  },
+];

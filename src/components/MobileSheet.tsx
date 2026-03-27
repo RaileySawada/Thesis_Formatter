@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { RULES_DEF } from "../constants";
+import { RULES_DEF, CITATION_STYLES } from "../constants";
+import type { CitationStyle } from "../constants";
 
 const SECTIONS = [
   {
@@ -34,6 +35,8 @@ interface Props {
   toggleRule: (v: string) => void;
   sectionLabels: Record<string, string>;
   sectionIcons: Record<string, string>;
+  citationStyle: CitationStyle;
+  setCitationStyle: (v: CitationStyle) => void;
 }
 
 export default function MobileSheet({
@@ -43,6 +46,8 @@ export default function MobileSheet({
   toggleSection,
   enabledRules,
   toggleRule,
+  citationStyle,
+  setCitationStyle,
 }: Props) {
   const [visible, setVisible] = useState(false);
   const [closing, setClosing] = useState(false);
@@ -113,6 +118,81 @@ export default function MobileSheet({
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 pb-4 space-y-4">
+          {/* Citation Style */}
+          <div>
+            <p
+              className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em]"
+              style={{ color: "var(--text-muted)" }}
+            >
+              <i className="fa-solid fa-quote-left mr-1" /> Citation Style
+            </p>
+            <div className="flex gap-2">
+              {CITATION_STYLES.map((cs) => {
+                const active = citationStyle === cs.value;
+                return (
+                  <button
+                    key={cs.value}
+                    type="button"
+                    onClick={() => setCitationStyle(cs.value)}
+                    className="flex-1 flex flex-col items-center gap-1.5 rounded-2xl border-2 px-3 py-3 transition-all text-center"
+                    style={
+                      active
+                        ? {
+                            borderColor: "var(--accent)",
+                            background: "var(--accent-subtle)",
+                          }
+                        : {
+                            borderColor: "var(--border)",
+                            background: "var(--surface-raised)",
+                          }
+                    }
+                  >
+                    <span
+                      className="flex h-7 w-7 items-center justify-center rounded-xl text-xs"
+                      style={
+                        active
+                          ? {
+                              background: "var(--accent-subtle-strong)",
+                              color: "var(--accent)",
+                            }
+                          : {
+                              background: "var(--surface)",
+                              color: "var(--text-muted)",
+                            }
+                      }
+                    >
+                      <i className={`fa-solid ${cs.icon}`} />
+                    </span>
+                    <span
+                      className="text-sm font-bold"
+                      style={{
+                        color: active
+                          ? "var(--text-primary)"
+                          : "var(--text-secondary)",
+                      }}
+                    >
+                      {cs.label}
+                    </span>
+                    <span
+                      className="text-[10px]"
+                      style={{ color: "var(--text-muted)" }}
+                    >
+                      {cs.sub}
+                    </span>
+                    {active && (
+                      <span
+                        className="rounded-full px-2 py-0.5 text-[9px] font-bold uppercase"
+                        style={{ background: "var(--accent)", color: "#fff" }}
+                      >
+                        Active
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <div>
             <p
               className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em]"
