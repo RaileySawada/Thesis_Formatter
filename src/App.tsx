@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { formatDocx } from "./lib/FormatterEngine";
 import { formatDocxApa } from "./lib/ApaFormatterEngine";
 import { formatPreliminary } from "./lib/PreliminaryEngine";
@@ -83,6 +83,22 @@ export default function App() {
   // ── modals ─────────────────────────────────────────────────────
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [templateDropdownOpen, setTemplateDropdownOpen] = useState(false);
+  const templateDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!templateDropdownOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (
+        templateDropdownRef.current &&
+        !templateDropdownRef.current.contains(e.target as Node)
+      ) {
+        setTemplateDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [templateDropdownOpen]);
 
   // ── processing ─────────────────────────────────────────────────
   const [processing, setProcessing] = useState(false);
@@ -287,7 +303,10 @@ export default function App() {
                 boxShadow: "var(--shadow)",
               }}
             >
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div
+                className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"
+                style={{ position: "relative" }}
+              >
                 <div>
                   <p
                     className="text-[10px] font-bold uppercase tracking-[0.22em]"
@@ -308,19 +327,117 @@ export default function App() {
                     chapters, references, figures, tables, and captions.
                   </p>
                 </div>
-                <div className="flex shrink-0 gap-2">
-                  <a
-                    href="/template/manuscript_template.docx"
-                    download="manuscript_template.docx"
-                    className="inline-flex items-center gap-1.5 rounded-2xl px-4 py-2.5 text-xs font-bold text-white transition hover:opacity-90 active:scale-95 shadow-md"
-                    style={{
-                      background: "var(--accent)",
-                      boxShadow: "0 4px 12px var(--accent-glow)",
-                    }}
-                  >
-                    <i className="fa-solid fa-file-arrow-down text-xs" />{" "}
-                    Download Template
-                  </a>
+                <div
+                  className="flex shrink-0 gap-2"
+                  style={{ position: "relative", zIndex: 10 }}
+                >
+                  {/* Download Template dropdown */}
+                  <div className="relative" ref={templateDropdownRef}>
+                    <button
+                      type="button"
+                      onClick={() => setTemplateDropdownOpen((v) => !v)}
+                      className="z-0 inline-flex items-center gap-1.5 rounded-2xl px-4 py-2.5 text-xs font-bold text-white transition hover:opacity-90 active:scale-95 shadow-md"
+                      style={{
+                        background: "var(--accent)",
+                        boxShadow: "0 4px 12px var(--accent-glow)",
+                      }}
+                    >
+                      <i className="fa-solid fa-file-arrow-down text-xs" />
+                      Download Template
+                      <i
+                        className={`fa-solid fa-chevron-down text-[9px] transition-transform duration-200${templateDropdownOpen ? " rotate-180" : ""}`}
+                      />
+                    </button>
+                    {templateDropdownOpen && (
+                      <div
+                        className="template-dropdown absolute right-auto left-0 sm:right-0 sm:left-auto top-full mt-2 min-w-55 rounded-2xl border overflow-hidden"
+                        style={{
+                          background: "var(--surface-raised)",
+                          borderColor: "var(--border)",
+                          boxShadow: "0 12px 40px rgba(0,0,0,0.28)",
+                          zIndex: 9999,
+                        }}
+                      >
+                        <a
+                          href="/template/manuscript_template(IEEE).docx"
+                          download="manuscript_template(IEEE).docx"
+                          onClick={() => setTemplateDropdownOpen(false)}
+                          className="template-dropdown-item flex items-center gap-3 px-4 py-3 text-xs font-semibold transition-colors"
+                          style={{ color: "var(--text-primary)" }}
+                        >
+                          <span
+                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl"
+                            style={{
+                              background: "var(--accent-subtle-strong)",
+                            }}
+                          >
+                            <i
+                              className="fa-solid fa-hashtag text-[11px]"
+                              style={{ color: "var(--accent)" }}
+                            />
+                          </span>
+                          <span className="flex-1">
+                            <span
+                              className="block font-bold"
+                              style={{ color: "var(--text-primary)" }}
+                            >
+                              IEEE
+                            </span>
+                            <span
+                              className="block text-[10px]"
+                              style={{ color: "var(--text-soft)" }}
+                            >
+                              Numbered references [1]
+                            </span>
+                          </span>
+                          <i
+                            className="fa-solid fa-arrow-down text-[10px]"
+                            style={{ color: "var(--text-muted)" }}
+                          />
+                        </a>
+                        <div
+                          style={{ height: "1px", background: "var(--border)" }}
+                        />
+                        <a
+                          href="/template/manuscript_template(APA 7th Edition).docx"
+                          download="manuscript_template(APA 7th Edition).docx"
+                          onClick={() => setTemplateDropdownOpen(false)}
+                          className="template-dropdown-item flex items-center gap-3 px-4 py-3 text-xs font-semibold transition-colors"
+                          style={{ color: "var(--text-primary)" }}
+                        >
+                          <span
+                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl"
+                            style={{
+                              background: "var(--accent-subtle-strong)",
+                            }}
+                          >
+                            <i
+                              className="fa-solid fa-user-pen text-[11px]"
+                              style={{ color: "var(--accent)" }}
+                            />
+                          </span>
+                          <span className="flex-1">
+                            <span
+                              className="block font-bold"
+                              style={{ color: "var(--text-primary)" }}
+                            >
+                              APA 7th Edition
+                            </span>
+                            <span
+                              className="block text-[10px]"
+                              style={{ color: "var(--text-soft)" }}
+                            >
+                              Author-date (Smith, 2024)
+                            </span>
+                          </span>
+                          <i
+                            className="fa-solid fa-arrow-down text-[10px]"
+                            style={{ color: "var(--text-muted)" }}
+                          />
+                        </a>
+                      </div>
+                    )}
+                  </div>
                   <button
                     onClick={() => setPreviewOpen(true)}
                     className="inline-flex items-center gap-1.5 rounded-2xl border px-4 py-2.5 text-xs font-semibold transition hover:opacity-80"

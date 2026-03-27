@@ -73,17 +73,17 @@ export default function MobileSheet({
   if (!visible) return null;
 
   return (
-    <>
-      <div
-        className={`modal-backdrop${closing ? " closing" : " open"}`}
-        onClick={handleClose}
-      />
-      <div
-        className={`mobile-options-sheet${closing ? " closing" : " is-open"}`}
-      >
+    <div
+      className={`options-backdrop${visible ? " open" : ""}`}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) handleClose();
+      }}
+    >
+      <div className={`options-modal${closing ? " closing" : ""}`}>
         <div className="px-5 pt-4 pb-2 shrink-0">
+          {/* Drag handle — mobile only */}
           <div
-            className="mx-auto mb-3 h-1 w-10 rounded-full"
+            className="options-drag-handle mx-auto mb-3 h-1 w-10 rounded-full"
             style={{ background: "var(--border)" }}
           />
           <div className="flex items-center justify-between">
@@ -156,8 +156,8 @@ export default function MobileSheet({
                               color: "var(--accent)",
                             }
                           : {
-                              background: "var(--surface)",
-                              color: "var(--text-muted)",
+                              background: "var(--border)",
+                              color: "var(--text-secondary)",
                             }
                       }
                     >
@@ -166,16 +166,18 @@ export default function MobileSheet({
                     <span
                       className="text-sm font-bold"
                       style={{
-                        color: active
-                          ? "var(--text-primary)"
-                          : "var(--text-secondary)",
+                        color: "var(--text-primary)",
                       }}
                     >
                       {cs.label}
                     </span>
                     <span
                       className="text-[10px]"
-                      style={{ color: "var(--text-muted)" }}
+                      style={{
+                        color: active
+                          ? "var(--text-secondary)"
+                          : "var(--text-soft)",
+                      }}
                     >
                       {cs.sub}
                     </span>
@@ -373,6 +375,6 @@ export default function MobileSheet({
           </button>
         </div>
       </div>
-    </>
+    </div>
   );
 }

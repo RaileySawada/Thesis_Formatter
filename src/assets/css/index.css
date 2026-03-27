@@ -14,9 +14,9 @@
   --accent-subtle-strong: #dbeafe;
   --accent-glow: rgba(37, 99, 235, 0.25);
   --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --text-muted: #94a3b8;
-  --text-soft: #64748b;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --text-soft: #475569;
   --status-bg: #1e293b;
   --shadow: 0 4px 24px rgba(15, 23, 42, 0.07);
   --blob-1: #93c5fd;
@@ -38,9 +38,9 @@
   --accent-subtle-strong: #172a4a;
   --accent-glow: rgba(59, 130, 246, 0.35);
   --text-primary: #e6edf3;
-  --text-secondary: #8b949e;
-  --text-muted: #484f58;
-  --text-soft: rgba(255, 255, 255, 0.65);
+  --text-secondary: #adbac7;
+  --text-muted: #7d8590;
+  --text-soft: rgba(255, 255, 255, 0.78);
   --status-bg: #0d1117;
   --shadow: 0 4px 32px rgba(0, 0, 0, 0.5);
   --blob-1: #1d4ed8;
@@ -350,44 +350,77 @@ body[data-theme="dark"] {
   opacity: 0.4 !important;
 }
 
-/* ── Mobile sheet ────────────────────────────────────────────────── */
-.modal-backdrop {
+/* ── Options modal (responsive — sheet on mobile, dialog on desktop) ─ */
+.options-backdrop {
   display: none;
   position: fixed;
   inset: 0;
   z-index: 50;
   background: rgba(0, 0, 0, 0.65);
+  align-items: flex-end;
+  justify-content: center;
 }
-.modal-backdrop.open {
-  display: block;
+.options-backdrop.open {
+  display: flex;
   animation: backdropIn 0.25s ease forwards;
 }
-.modal-backdrop.closing {
-  display: block !important;
+.options-backdrop.closing {
+  display: flex !important;
   animation: backdropOut 0.32s ease forwards;
 }
+@media (min-width: 640px) {
+  .options-backdrop.open,
+  .options-backdrop.closing {
+    align-items: center;
+  }
+}
 
-.mobile-options-sheet {
-  display: none;
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 51;
+.options-modal {
   flex-direction: column;
-  max-height: 92dvh;
-  border-radius: 24px 24px 0 0;
-  box-shadow: 0 -4px 32px rgba(0, 0, 0, 0.22);
-  will-change: transform;
   background: var(--surface);
+  will-change: transform;
+  width: 100%;
 }
-.mobile-options-sheet.is-open {
-  display: flex;
-  animation: slideSheetUp 0.42s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+
+/* Mobile: slide up sheet */
+@media (max-width: 639px) {
+  .options-modal {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 51;
+    max-height: 92dvh;
+    border-radius: 24px 24px 0 0;
+    box-shadow: 0 -4px 32px rgba(0, 0, 0, 0.22);
+    display: flex;
+    animation: slideSheetUp 0.42s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+  .options-modal.closing {
+    animation: slideSheetDown 0.32s cubic-bezier(0.55, 0, 1, 0.45) forwards;
+  }
 }
-.mobile-options-sheet.closing {
-  display: flex !important;
-  animation: slideSheetDown 0.32s cubic-bezier(0.55, 0, 1, 0.45) forwards;
+
+/* Desktop: centered dialog */
+@media (min-width: 640px) {
+  .options-modal {
+    position: relative;
+    max-width: 520px;
+    max-height: 80dvh;
+    border-radius: 24px;
+    border: 1px solid var(--border);
+    box-shadow: 0 32px 80px rgba(0, 0, 0, 0.35);
+    overflow: hidden;
+    display: flex;
+    animation: dialogFadeIn 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+  .options-modal.closing {
+    animation: dialogFadeOut 0.24s ease forwards;
+  }
+  /* Hide drag handle on desktop */
+  .options-drag-handle {
+    display: none;
+  }
 }
 
 /* ── Preview modal ───────────────────────────────────────────────── */
@@ -513,6 +546,28 @@ body[data-theme="dark"] {
     opacity: 0;
     transform: scale(0.96);
   }
+}
+
+/* ── Template download dropdown ──────────────────────────────────── */
+.template-dropdown {
+  animation: dropdownIn 0.18s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes dropdownIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.template-dropdown-item {
+  background: transparent;
+  text-decoration: none;
+}
+.template-dropdown-item:hover {
+  background: var(--accent-subtle) !important;
 }
 
 /* ── Toast ───────────────────────────────────────────────────────── */

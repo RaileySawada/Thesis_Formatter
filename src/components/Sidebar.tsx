@@ -158,7 +158,7 @@ export default function Sidebar({
                       }
                     : {
                         borderColor: "var(--border)",
-                        background: "transparent",
+                        background: "var(--surface-raised)",
                       }
                 }
               >
@@ -171,8 +171,8 @@ export default function Sidebar({
                           color: "var(--accent)",
                         }
                       : {
-                          background: "var(--surface)",
-                          color: "var(--text-muted)",
+                          background: "var(--border)",
+                          color: "var(--text-secondary)",
                         }
                   }
                 >
@@ -183,14 +183,18 @@ export default function Sidebar({
                   style={{
                     color: active
                       ? "var(--text-primary)"
-                      : "var(--text-secondary)",
+                      : "var(--text-primary)",
                   }}
                 >
                   {cs.label}
                 </span>
                 <span
                   className="text-[9px] leading-tight"
-                  style={{ color: "var(--text-muted)" }}
+                  style={{
+                    color: active
+                      ? "var(--text-secondary)"
+                      : "var(--text-soft)",
+                  }}
                 >
                   {cs.sub}
                 </span>
