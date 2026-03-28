@@ -309,18 +309,7 @@ export default function App() {
               >
                 <div>
                   <p
-                    className="text-[10px] font-bold uppercase tracking-[0.22em]"
-                    style={{ color: "var(--accent)" }}
-                  >
-                    <img
-                      src="/images/logo.webp"
-                      alt=""
-                      className="inline-block h-4 w-4 object-contain mr-1 align-middle rounded"
-                    />
-                    Manuscript Formatter
-                  </p>
-                  <p
-                    className="mt-2 text-sm leading-7"
+                    className="text-sm leading-7"
                     style={{ color: "var(--text-soft)" }}
                   >
                     Upload your manuscript and apply formatting rules for
