@@ -222,14 +222,14 @@ export default function App() {
           <div className="flex items-center gap-2">
             <img
               src="/images/logo.webp"
-              alt="Thesis Formatter"
+              alt="Manuscript Formatter"
               className="h-8 w-8 object-contain rounded-xl"
             />
             <span
               className="text-[11px] font-bold uppercase tracking-[0.2em]"
               style={{ color: "var(--accent)" }}
             >
-              Thesis Formatter
+              Manuscript Formatter
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -317,7 +317,7 @@ export default function App() {
                       alt=""
                       className="inline-block h-4 w-4 object-contain mr-1 align-middle rounded"
                     />
-                    Thesis Formatter
+                    Manuscript Formatter
                   </p>
                   <p
                     className="mt-2 text-sm leading-7"

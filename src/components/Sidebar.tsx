@@ -59,7 +59,7 @@ export default function Sidebar({
       <div className="flex items-center gap-3 pb-1">
         <img
           src="/images/logo.webp"
-          alt="Thesis Formatter"
+          alt="Manuscript Formatter"
           className="h-10 w-10 object-contain shrink-0 rounded-xl"
         />
         <div>
@@ -67,7 +67,7 @@ export default function Sidebar({
             className="text-[10px] font-bold uppercase tracking-[0.22em]"
             style={{ color: "var(--accent)" }}
           >
-            Thesis
+            Manuscript
           </p>
           <p
             className="text-sm font-bold leading-none"
