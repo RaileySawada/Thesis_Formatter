@@ -17,6 +17,7 @@
  *   line (auto)       : 240 = 1.0×, 480 = 2.0×, 720 = 3.0×
  *   EMU               : 1 cm = 360 000 EMU
  *   twips (margin)    : 1 cm ≈ 567 twips  → 0.3 cm ≈ 170 twips
+ *   DrawingML line w  : pt × 12 700 EMU   (3 pt → 38 100)
  */
 
 const W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
@@ -27,10 +28,26 @@ const R_NS =
 const RELS_NS = "http://schemas.openxmlformats.org/package/2006/relationships";
 const CT_NS = "http://schemas.openxmlformats.org/package/2006/content-types";
 
+// DrawingML main namespace — a:ln, a:solidFill, a:srgbClr, a:noFill, a:prstDash
+const A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main";
+
 // ─── EMU constants ─────────────────────────────────────────────────────────────
-// User-Manual image: width 18.20 cm, height 27 cm
 const UM_IMAGE_W_EMU = 6_552_000; // 18.20 cm × 360 000
 const UM_IMAGE_H_EMU = 9_720_000; //  27.00 cm × 360 000
+
+// ─── Appendix large-figure thresholds and targets ─────────────────────────────
+const APPENDIX_MIN_H_EMU = 5_760_000; // 16 cm — height threshold
+const APPENDIX_MIN_W_EMU = 3_600_000; // 10 cm — width  threshold
+const APPENDIX_TARGET_W_EMU = 5_400_000; // 15 cm  — output width
+const APPENDIX_TARGET_H_EMU = 6_768_000; // 18.8 cm — output height (after appendix title)
+const APPENDIX_TARGET_H_CONT_EMU = 6_984_000; // 19.4 cm — output height (after continuation label)
+
+// 3 pt border in DrawingML line-width units (EMU): 3 × 12 700
+const APPENDIX_BORDER_W_EMU = 38_100;
+
+// Full border width in EMU — used as effectExtent on all four sides so
+// Word does not clip any part of the border stroke, including top and bottom.
+const APPENDIX_BORDER_EXTENT_EMU = APPENDIX_BORDER_W_EMU; // 38 100
 
 // ─── low-level helpers ─────────────────────────────────────────────────────────
 
@@ -83,7 +100,6 @@ function getParagraphText(p: Element): string {
   const parts: string[] = [];
   p.querySelectorAll("*").forEach((el) => {
     if (el.localName === "t" && el.namespaceURI === W_NS) {
-      // Skip text inside text boxes
       let ancestor = el.parentElement;
       while (ancestor && ancestor !== p) {
         if (ancestor.localName === "txbxContent") return;
@@ -187,7 +203,6 @@ function writePSpacing(
   pPr.appendChild(cs);
 }
 
-/** Write paragraph-mark rPr (affects default run style for new/empty runs). */
 function writePPrRPr(
   p: Element,
   font: string,
@@ -221,7 +236,6 @@ function writePPrRPr(
   rPr.appendChild(szCs);
 }
 
-/** Apply font / size / bold / italic to all non-special text runs. */
 function applyRunFormatting(
   p: Element,
   font: string,
@@ -294,7 +308,6 @@ function applyRunFormatting(
   }
 }
 
-/** Strip common pPr children (NOT sectPr — that must survive). */
 function stripPPr(p: Element) {
   const pPr = getChild(p, "pPr");
   if (!pPr) return;
@@ -320,10 +333,6 @@ function stripPPr(p: Element) {
 
 // ─── text-run rewriter ─────────────────────────────────────────────────────────
 
-/**
- * Replace all text content in a paragraph with a single clean run.
- * Drawings / special runs are left untouched.
- */
 function rewriteParagraphText(p: Element, text: string) {
   Array.from(p.querySelectorAll("r"))
     .filter(
@@ -333,7 +342,7 @@ function rewriteParagraphText(p: Element, text: string) {
           ["drawing", "pict", "instrText", "fldChar"].includes(c.localName),
         ),
     )
-    .forEach((r) => p.removeChild(r));
+    .forEach((r) => r.parentElement?.removeChild(r));
 
   const run = wElem(p.ownerDocument!, "r");
   const tEl = wElem(p.ownerDocument!, "t");
@@ -344,45 +353,28 @@ function rewriteParagraphText(p: Element, text: string) {
 
 // ─── paragraph formatters ───────────────────────────────────────────────────────
 
-/**
- * APPENDICES title page / CURRICULUM VITAE title page.
- *
- * • Page break before (alone on page)
- * • UPPERCASE text
- * • Garamond 14 pt
- * • Centered
- * • 3.0 line spacing
- * • 0 before / after paragraph spacing
- * • 0 indentation
- * • No whitespace before / after title words
- */
 function applyAppendicesSectionTitle(p: Element) {
   stripPPr(p);
   uppercaseParagraph(p);
   trimParagraphText(p);
 
   const pPr = ensurePPr(p);
-
-  // Page break before — title must be alone on its page
   pPr.appendChild(wElem(p.ownerDocument!, "pageBreakBefore"));
 
-  // Center alignment
   const jc = wElem(p.ownerDocument!, "jc");
   setWAttr(jc, "val", "center");
   pPr.appendChild(jc);
 
-  // 0 indentation
   const ind = wElem(p.ownerDocument!, "ind");
   setWAttr(ind, "firstLine", "0");
   setWAttr(ind, "left", "0");
   setWAttr(ind, "right", "0");
   pPr.appendChild(ind);
 
-  // 3.0 line spacing, 0 before / after
   const sp = wElem(p.ownerDocument!, "spacing");
   setWAttr(sp, "before", "0");
   setWAttr(sp, "after", "0");
-  setWAttr(sp, "line", "720"); // 3 × 240
+  setWAttr(sp, "line", "720");
   setWAttr(sp, "lineRule", "auto");
   setWAttr(sp, "beforeAutospacing", "0");
   setWAttr(sp, "afterAutospacing", "0");
@@ -392,28 +384,16 @@ function applyAppendicesSectionTitle(p: Element) {
   setWAttr(cs, "val", "0");
   pPr.appendChild(cs);
 
-  // Garamond 14 pt (28 half-points), bold
   writePPrRPr(p, "Garamond", 28, true, false);
   applyRunFormatting(p, "Garamond", 28, true, false);
 }
 
-/**
- * Appendix letter header — e.g. "Appendix A".
- *
- * • Rewrites text to canonical "Appendix X"
- * • Page break before (each appendix begins on a new page)
- * • Garamond 14 pt, bold
- * • Centered
- * • 1.0 line spacing
- * • 0 before / after, 0 indentation
- */
 function applyAppendixLetter(p: Element, letter: string) {
   const canonical = `Appendix ${letter.toUpperCase()}`;
   rewriteParagraphText(p, canonical);
   stripPPr(p);
 
   const pPr = ensurePPr(p);
-
   removeChildren(pPr, "sectPr");
   pPr.appendChild(wElem(p.ownerDocument!, "pageBreakBefore"));
 
@@ -427,11 +407,10 @@ function applyAppendixLetter(p: Element, letter: string) {
   setWAttr(ind, "right", "0");
   pPr.appendChild(ind);
 
-  // 1.0 line spacing
   const sp = wElem(p.ownerDocument!, "spacing");
   setWAttr(sp, "before", "0");
   setWAttr(sp, "after", "0");
-  setWAttr(sp, "line", "240"); // 1.0×
+  setWAttr(sp, "line", "240");
   setWAttr(sp, "lineRule", "auto");
   setWAttr(sp, "beforeAutospacing", "0");
   setWAttr(sp, "afterAutospacing", "0");
@@ -445,15 +424,6 @@ function applyAppendixLetter(p: Element, letter: string) {
   applyRunFormatting(p, "Garamond", 28, true, false);
 }
 
-/**
- * Appendix title — the single paragraph immediately after the appendix letter.
- *
- * • UPPERCASE, trim whitespace
- * • Garamond 14 pt, bold
- * • Centered
- * • 3.0 line spacing
- * • 0 before / after, 0 indentation
- */
 function applyAppendixTitle(p: Element) {
   stripPPr(p);
   uppercaseParagraph(p);
@@ -474,7 +444,7 @@ function applyAppendixTitle(p: Element) {
   const sp = wElem(p.ownerDocument!, "spacing");
   setWAttr(sp, "before", "0");
   setWAttr(sp, "after", "0");
-  setWAttr(sp, "line", "720"); // 3.0×
+  setWAttr(sp, "line", "720");
   setWAttr(sp, "lineRule", "auto");
   setWAttr(sp, "beforeAutospacing", "0");
   setWAttr(sp, "afterAutospacing", "0");
@@ -488,15 +458,6 @@ function applyAppendixTitle(p: Element) {
   applyRunFormatting(p, "Garamond", 28, true, false);
 }
 
-/**
- * Continuation of Appendix label — "Continuation of Appendix X..."
- *
- * • Rewrites to canonical form (exactly 3 dots)
- * • Garamond 13 pt, italic
- * • Left-aligned
- * • 3.0 line spacing
- * • 0 before / after, 0 indentation
- */
 function applyContinuationAppendixLabel(p: Element, currentLetter: string) {
   const canonical = currentLetter
     ? `Continuation of Appendix ${currentLetter.toUpperCase()}...`
@@ -519,7 +480,7 @@ function applyContinuationAppendixLabel(p: Element, currentLetter: string) {
   const sp = wElem(p.ownerDocument!, "spacing");
   setWAttr(sp, "before", "0");
   setWAttr(sp, "after", "0");
-  setWAttr(sp, "line", "720"); // 3.0×
+  setWAttr(sp, "line", "720");
   setWAttr(sp, "lineRule", "auto");
   setWAttr(sp, "beforeAutospacing", "0");
   setWAttr(sp, "afterAutospacing", "0");
@@ -529,15 +490,10 @@ function applyContinuationAppendixLabel(p: Element, currentLetter: string) {
   setWAttr(cs, "val", "0");
   pPr.appendChild(cs);
 
-  // Garamond 13 pt (26 half-points), italic, not bold
   writePPrRPr(p, "Garamond", 26, false, true);
   applyRunFormatting(p, "Garamond", 26, false, true);
 }
 
-/**
- * Zero-height empty paragraph (used between content elements).
- * Leaves any existing sectPr alone.
- */
 function applyEmptyParagraph(p: Element) {
   const pPr = ensurePPr(p);
   for (const tag of [
@@ -572,7 +528,6 @@ function applyEmptyParagraph(p: Element) {
 
 // ─── image helpers ─────────────────────────────────────────────────────────────
 
-/** Walk a subtree and return all w:drawing elements. */
 function collectDrawings(node: Element): Element[] {
   const result: Element[] = [];
   for (const c of Array.from(node.childNodes)) {
@@ -583,10 +538,92 @@ function collectDrawings(node: Element): Element[] {
   return result;
 }
 
+function getDrawingExtentEmu(
+  drawing: Element,
+): { cx: number; cy: number } | null {
+  for (const name of ["inline", "anchor"]) {
+    const container = Array.from(drawing.childNodes).find(
+      (c): c is Element =>
+        c instanceof Element &&
+        c.namespaceURI === WP_NS &&
+        c.localName === name,
+    );
+    if (!container) continue;
+    const extent = Array.from(container.childNodes).find(
+      (c): c is Element => c instanceof Element && c.localName === "extent",
+    );
+    if (extent) {
+      return {
+        cx: parseInt(extent.getAttribute("cx") ?? "0", 10),
+        cy: parseInt(extent.getAttribute("cy") ?? "0", 10),
+      };
+    }
+  }
+  return null;
+}
+
 /**
- * Convert a floating wp:anchor to wp:inline so the image flows with text.
- * If the drawing already has an inline child, do nothing.
+ * Set a solid black picture border of the given EMU width on every spPr
+ * inside the drawing.
+ *
+ * The a:ln element lives inside pic:spPr (or equivalent spPr) in the
+ * DrawingML tree — this is the same property exposed by Word's
+ * "Format Picture → Picture Border" panel.  It draws an outline directly
+ * on the image edge, not around the paragraph.
+ *
+ * querySelectorAll("spPr") matches by local name regardless of namespace
+ * prefix, so it covers both pic:spPr and any other variant correctly.
  */
+function setDrawingBorder(drawing: Element, widthEmu: number) {
+  drawing.querySelectorAll("spPr").forEach((spPr) => {
+    // Remove any pre-existing a:ln
+    Array.from(spPr.childNodes)
+      .filter((c): c is Element => c instanceof Element && c.localName === "ln")
+      .forEach((ln) => spPr.removeChild(ln));
+
+    const doc = drawing.ownerDocument!;
+
+    // <a:ln w="38100" cap="flat" cmpd="sng" algn="ctr">
+    const ln = doc.createElementNS(A_NS, "a:ln");
+    ln.setAttribute("w", String(widthEmu));
+    ln.setAttribute("cap", "flat");
+    ln.setAttribute("cmpd", "sng");
+    ln.setAttribute("algn", "ctr");
+
+    // <a:solidFill><a:srgbClr val="000000"/></a:solidFill>
+    const solidFill = doc.createElementNS(A_NS, "a:solidFill");
+    const srgbClr = doc.createElementNS(A_NS, "a:srgbClr");
+    srgbClr.setAttribute("val", "000000");
+    solidFill.appendChild(srgbClr);
+    ln.appendChild(solidFill);
+
+    // <a:prstDash val="solid"/>
+    const prstDash = doc.createElementNS(A_NS, "a:prstDash");
+    prstDash.setAttribute("val", "solid");
+    ln.appendChild(prstDash);
+
+    spPr.appendChild(ln);
+  });
+}
+
+/**
+ * Explicitly remove any picture border from every spPr in the drawing by
+ * replacing a:ln with <a:ln><a:noFill/></a:ln>.
+ * This prevents Word from falling back to a theme or style default outline.
+ */
+function clearDrawingBorder(drawing: Element) {
+  drawing.querySelectorAll("spPr").forEach((spPr) => {
+    Array.from(spPr.childNodes)
+      .filter((c): c is Element => c instanceof Element && c.localName === "ln")
+      .forEach((ln) => spPr.removeChild(ln));
+
+    const doc = drawing.ownerDocument!;
+    const ln = doc.createElementNS(A_NS, "a:ln");
+    ln.appendChild(doc.createElementNS(A_NS, "a:noFill"));
+    spPr.appendChild(ln);
+  });
+}
+
 function convertAnchorToInline(drawing: Element) {
   const alreadyInline = Array.from(drawing.childNodes).some(
     (c): c is Element =>
@@ -611,7 +648,6 @@ function convertAnchorToInline(drawing: Element) {
   inline.setAttribute("distL", "0");
   inline.setAttribute("distR", "0");
 
-  // Copy extent
   const anchorExtent = Array.from(anchor.childNodes).find(
     (c): c is Element => c instanceof Element && c.localName === "extent",
   );
@@ -629,7 +665,6 @@ function convertAnchorToInline(drawing: Element) {
   eff.setAttribute("b", "0");
   inline.appendChild(eff);
 
-  // Copy docPr, cNvGraphicFramePr, graphic
   Array.from(anchor.childNodes).forEach((c) => {
     if (
       c instanceof Element &&
@@ -641,10 +676,6 @@ function convertAnchorToInline(drawing: Element) {
   drawing.replaceChild(inline, anchor);
 }
 
-/**
- * Resize an inline image to the target EMU dimensions.
- * Updates wp:extent and pic:spPr a:xfrm a:ext (if present).
- */
 function resizeInlineImage(
   drawing: Element,
   widthEmu: number,
@@ -658,7 +689,6 @@ function resizeInlineImage(
   );
   if (!inline) return;
 
-  // wp:extent
   const extent = Array.from(inline.childNodes).find(
     (c): c is Element => c instanceof Element && c.localName === "extent",
   );
@@ -667,7 +697,6 @@ function resizeInlineImage(
     extent.setAttribute("cy", String(heightEmu));
   }
 
-  // a:xfrm > a:ext inside any pic:spPr
   inline.querySelectorAll("ext").forEach((ext) => {
     const parent = ext.parentElement;
     if (parent && parent.localName === "xfrm") {
@@ -678,9 +707,50 @@ function resizeInlineImage(
 }
 
 /**
- * Apply User Manual image paragraph formatting:
- *   Right-aligned paragraph, inline image, 18.20 cm × 27 cm.
+ * Set the wp:effectExtent on the inline container so that the picture border
+ * (a:ln, rendered at half its declared width outside the image boundary) is
+ * not clipped.  Pass the half-width of the border stroke in EMU.
+ *
+ * Word clips anything that protrudes beyond the effectExtent, so setting all
+ * four sides to at least half the stroke width ensures the top and bottom
+ * edges of the border are fully visible.
  */
+function setInlineEffectExtent(drawing: Element, marginEmu: number) {
+  const inline = Array.from(drawing.childNodes).find(
+    (c): c is Element =>
+      c instanceof Element &&
+      c.namespaceURI === WP_NS &&
+      c.localName === "inline",
+  );
+  if (!inline) return;
+
+  // Remove existing effectExtent and replace with new values.
+  Array.from(inline.childNodes)
+    .filter(
+      (c): c is Element =>
+        c instanceof Element && c.localName === "effectExtent",
+    )
+    .forEach((e) => inline.removeChild(e));
+
+  const doc = drawing.ownerDocument!;
+  const eff = doc.createElementNS(WP_NS, "wp:effectExtent");
+  const val = String(marginEmu);
+  eff.setAttribute("l", val);
+  eff.setAttribute("t", val);
+  eff.setAttribute("r", val);
+  eff.setAttribute("b", val);
+
+  // Insert after wp:extent (first child).
+  const extent = Array.from(inline.childNodes).find(
+    (c): c is Element => c instanceof Element && c.localName === "extent",
+  );
+  if (extent && extent.nextSibling) {
+    inline.insertBefore(eff, extent.nextSibling);
+  } else {
+    inline.appendChild(eff);
+  }
+}
+
 function applyUserManualImageParagraph(p: Element) {
   const pPr = ensurePPr(p);
   for (const tag of [
@@ -694,7 +764,6 @@ function applyUserManualImageParagraph(p: Element) {
   ])
     removeChildren(pPr, tag);
 
-  // Right-aligned
   const jc = wElem(p.ownerDocument!, "jc");
   setWAttr(jc, "val", "right");
   pPr.appendChild(jc);
@@ -709,8 +778,8 @@ function applyUserManualImageParagraph(p: Element) {
 }
 
 /**
- * Apply CV image paragraph formatting:
- *   Centred paragraph, inline image (no resize).
+ * CV image paragraph: centred, inline, no border of any kind.
+ * clearDrawingBorder() removes any a:ln picture border from the source doc.
  */
 function applyCVImageParagraph(p: Element) {
   const pPr = ensurePPr(p);
@@ -732,36 +801,83 @@ function applyCVImageParagraph(p: Element) {
   writePIndentZero(p);
   writePSpacing(p, 0, 0, 240);
 
-  collectDrawings(p).forEach((drawing) => convertAnchorToInline(drawing));
+  collectDrawings(p).forEach((drawing) => {
+    convertAnchorToInline(drawing);
+    clearDrawingBorder(drawing);
+  });
+}
+
+/**
+ * Appendix figure paragraph: centred, inline.
+ *
+ * Per-drawing logic:
+ *   Meets threshold (>= 16 cm tall AND >= 10 cm wide):
+ *     → Resize to 19.4 cm H × 15 cm W
+ *     → Apply 3 pt solid black border via a:ln on the drawing's spPr
+ *        (this is the real picture border on the image edge, not a paragraph box)
+ *     → Set effectExtent to half the border stroke width on all four sides
+ *        so the top and bottom border edges are not clipped by Word's renderer
+ *   Does not meet threshold:
+ *     → Leave size unchanged
+ *     → Clear any pre-existing picture border
+ *
+ * No w:pBdr paragraph border is used.
+ */
+function applyAppendixFigureParagraph(p: Element, targetHeightEmu: number) {
+  const pPr = ensurePPr(p);
+  for (const tag of [
+    "pStyle",
+    "widowControl",
+    "jc",
+    "ind",
+    "spacing",
+    "pBdr",
+    "rPr",
+  ])
+    removeChildren(pPr, tag);
+
+  const jc = wElem(p.ownerDocument!, "jc");
+  setWAttr(jc, "val", "center");
+  pPr.appendChild(jc);
+
+  writePIndentZero(p);
+  writePSpacing(p, 0, 0, 240);
+
+  collectDrawings(p).forEach((drawing) => {
+    // Read extent BEFORE converting anchor → inline (anchor is removed after).
+    const extent = getDrawingExtentEmu(drawing);
+    convertAnchorToInline(drawing);
+
+    const meetsThreshold =
+      extent !== null &&
+      extent.cy >= APPENDIX_MIN_H_EMU &&
+      extent.cx >= APPENDIX_MIN_W_EMU;
+
+    if (meetsThreshold) {
+      resizeInlineImage(drawing, APPENDIX_TARGET_W_EMU, targetHeightEmu);
+      // Set a 3 pt solid black outline directly on the image via a:ln in spPr.
+      setDrawingBorder(drawing, APPENDIX_BORDER_W_EMU);
+      // Expand effectExtent on all four sides by the full stroke width so
+      // Word does not clip any part of the border, including top and bottom.
+      setInlineEffectExtent(drawing, APPENDIX_BORDER_EXTENT_EMU);
+    } else {
+      // Ensure no stray picture border from the source document survives.
+      clearDrawingBorder(drawing);
+    }
+  });
 }
 
 // ─── section-property helpers ──────────────────────────────────────────────────
 
-/**
- * Inject (or replace) a w:sectPr inside a paragraph's w:pPr.
- * The paragraph becomes the last paragraph of its section.
- * NB: sectPr must be the LAST child of pPr per the OOXML schema.
- */
 function injectSectPr(p: Element, sectPr: Element) {
   const pPr = ensurePPr(p);
   removeChildren(pPr, "sectPr");
   pPr.appendChild(sectPr);
 }
 
-/**
- * Create blank header and footer XML files inside the zip, register their
- * relationships and content-type overrides, then return the two rel IDs.
- *
- * Adding explicit (but empty) headerReference / footerReference to the User
- * Manual sectPr is what disables "Link to Previous" in Word — without them
- * the section just inherits whatever header/footer came before it.
- */
 async function addEmptyHeaderFooterToZip(
   zip: any,
 ): Promise<{ hdrRelId: string; ftrRelId: string }> {
-  // ── 1. Empty header / footer XML ─────────────────────────────────────────────
-  // The paragraph is required by the OOXML schema but we collapse it to
-  // 1-twip exact height so it occupies zero visible space.
   const zeroP =
     `<w:p>` +
     `<w:pPr>` +
@@ -789,7 +905,6 @@ async function addEmptyHeaderFooterToZip(
   zip.file("word/headerUM.xml", emptyHdr);
   zip.file("word/footerUM.xml", emptyFtr);
 
-  // ── 2. Update word/_rels/document.xml.rels ────────────────────────────────────
   const relsPath = "word/_rels/document.xml.rels";
   const relsRaw: string =
     (await zip.file(relsPath)?.async("string")) ??
@@ -800,7 +915,6 @@ async function addEmptyHeaderFooterToZip(
   const relsDom = relsParser.parseFromString(relsRaw, "application/xml");
   const relsRoot = relsDom.documentElement;
 
-  // Find highest existing numeric rId so we don't collide
   let maxId = 0;
   Array.from(relsRoot.childNodes).forEach((n) => {
     if (!(n instanceof Element)) return;
@@ -833,7 +947,6 @@ async function addEmptyHeaderFooterToZip(
 
   zip.file(relsPath, new XMLSerializer().serializeToString(relsDom));
 
-  // ── 3. Update [Content_Types].xml ────────────────────────────────────────────
   const ctPath = "[Content_Types].xml";
   const ctRaw: string | undefined = await zip.file(ctPath)?.async("string");
   if (ctRaw) {
@@ -869,12 +982,6 @@ async function addEmptyHeaderFooterToZip(
   return { hdrRelId, ftrRelId };
 }
 
-/**
- * Build a sectPr that ends the normal appendices section and starts a new one
- * (type = nextPage). Copies page-size from the main body sectPr; strips
- * headerReference / footerReference so the inline sectPr doesn't carry stale
- * relationship IDs.
- */
 function buildNormalClosingSectPr(
   doc: Document,
   mainSectPr: Element | null,
@@ -885,14 +992,12 @@ function buildNormalClosingSectPr(
     sectPr = mainSectPr.cloneNode(true) as Element;
   } else {
     sectPr = wElem(doc, "sectPr");
-    // Default A4 page size if the doc has no sectPr
     const pgSz = wElem(doc, "pgSz");
     setWAttr(pgSz, "w", "11906");
     setWAttr(pgSz, "h", "16838");
     sectPr.appendChild(pgSz);
   }
 
-  // Force nextPage type
   removeChildren(sectPr, "type");
   const typeEl = wElem(doc, "type");
   setWAttr(typeEl, "val", "nextPage");
@@ -901,16 +1006,6 @@ function buildNormalClosingSectPr(
   return sectPr;
 }
 
-/**
- * Build the User Manual section's sectPr:
- *   • Explicit empty headerReference / footerReference — disables "Link to Previous"
- *     so Word shows truly blank headers/footers (no text, shapes, or images)
- *   • All margins 0.3 cm (≈ 170 twips)
- *   • Header distance from top: 0
- *   • Footer distance from bottom: 0
- *   • Page size copied from main sectPr (A4 fallback)
- *   • type = nextPage
- */
 function buildUserManualSectPr(
   doc: Document,
   mainSectPr: Element | null,
@@ -919,12 +1014,10 @@ function buildUserManualSectPr(
 ): Element {
   const sectPr = wElem(doc, "sectPr");
 
-  // type = nextPage
   const typeEl = wElem(doc, "type");
   setWAttr(typeEl, "val", "nextPage");
   sectPr.appendChild(typeEl);
 
-  // Page size — reuse from main sectPr so paper size stays correct
   if (mainSectPr) {
     const pgSz = getChild(mainSectPr, "pgSz");
     if (pgSz) sectPr.appendChild(pgSz.cloneNode(true));
@@ -935,7 +1028,6 @@ function buildUserManualSectPr(
     sectPr.appendChild(pgSz);
   }
 
-  // 0.3 cm margins on all sides; header / footer distance = 0
   const pgMar = wElem(doc, "pgMar");
   setWAttr(pgMar, "top", "170");
   setWAttr(pgMar, "right", "170");
@@ -946,10 +1038,6 @@ function buildUserManualSectPr(
   setWAttr(pgMar, "gutter", "0");
   sectPr.appendChild(pgMar);
 
-  // ── Explicit empty header/footer references ───────────────────────────────────
-  // Adding these for all three types (default, first, even) fully disables
-  // "Link to Previous" — Word will show the blank headerUM/footerUM files
-  // instead of inheriting content from any prior section.
   const addRef = (tag: string, type: string, relId: string) => {
     const el = wElem(doc, tag);
     setWAttr(el, "type", type);
@@ -969,19 +1057,14 @@ function buildUserManualSectPr(
 
 // ─── state ─────────────────────────────────────────────────────────────────────
 
-type AppZone =
-  | "before" // haven't reached APPENDICES yet
-  | "appendices" // inside the appendices section (general)
-  | "user_manual" // inside the User Manual special section
-  | "cv"; // inside the Curriculum Vitae section
+type AppZone = "before" | "appendices" | "user_manual" | "cv";
 
 interface AppState {
   zone: AppZone;
-  /** true immediately after an appendix letter — next non-empty para is the title */
   expectingTitle: boolean;
   currentLetter: string;
-  /** true once the first CURRICULUM VITAE title has been processed */
   cvSeen: boolean;
+  afterContinuation: boolean;
 }
 
 // ─── public entry ──────────────────────────────────────────────────────────────
@@ -1005,7 +1088,6 @@ export async function formatAppendices(
     (c): c is Element => c instanceof Element,
   );
 
-  // The main document sectPr is the sole w:sectPr that is a DIRECT child of w:body.
   const mainSectPr =
     (Array.from(body.childNodes).find(
       (c): c is Element =>
@@ -1013,10 +1095,6 @@ export async function formatAppendices(
         c.localName === "sectPr" &&
         c.namespaceURI === W_NS,
     ) as Element | null) ?? null;
-
-  // ── locate APPENDICES section start ──────────────────────────────────────────
-  // We look for the first paragraph whose text is exactly "APPENDICES"
-  // (not "LIST OF APPENDICES") that appears after the REFERENCES heading.
 
   let appendicesStart = -1;
   let seenReferences = false;
@@ -1042,7 +1120,6 @@ export async function formatAppendices(
     }
   }
 
-  // Nothing to do if no APPENDICES section is found
   if (appendicesStart === -1) {
     const serializer = new XMLSerializer();
     zip.file("word/document.xml", serializer.serializeToString(dom));
@@ -1055,19 +1132,8 @@ export async function formatAppendices(
     .filter((c): c is Element => c instanceof Element && c !== mainSectPr)
     .slice(appendicesStart);
 
-  // ── PRE-PASS: locate User Manual and CV boundaries ────────────────────────────
-  //
-  // User Manual is an appendix title (appears right after an appendix letter).
-  // The paragraph that IS the "User Manual" title gets a sectPr injected into its
-  // pPr — this closes the normal-appendices section and the User Manual CONTENT
-  // begins in the next section.
-  //
-  // The LAST paragraph of User Manual content gets a sectPr with the special
-  // (0.3 cm, no header/footer) properties — this closes the User Manual section.
-  // Everything after it falls into the final section (uses the body's sectPr).
-
-  let userManualTitleIdx = -1; // index within scopedChildren
-  let userManualLastIdx = -1; // index of last UM content paragraph
+  let userManualTitleIdx = -1;
+  let userManualLastIdx = -1;
   let cvTitleIdx = -1;
 
   for (let i = 0; i < scopedChildren.length; i++) {
@@ -1089,7 +1155,6 @@ export async function formatAppendices(
     if (/^curriculum\s+vitae$/iu.test(txt)) {
       cvTitleIdx = i;
       if (userManualTitleIdx !== -1 && userManualLastIdx === -1) {
-        // Walk backwards to last paragraph before CV
         for (let j = i - 1; j > userManualTitleIdx; j--) {
           if (scopedChildren[j].localName === "p") {
             userManualLastIdx = j;
@@ -1100,7 +1165,6 @@ export async function formatAppendices(
       break;
     }
 
-    // Next appendix letter after the UM title also ends the UM section
     if (
       userManualTitleIdx !== -1 &&
       userManualLastIdx === -1 &&
@@ -1117,7 +1181,6 @@ export async function formatAppendices(
     }
   }
 
-  // If User Manual was found but no explicit end was detected, end at document tail
   if (userManualTitleIdx !== -1 && userManualLastIdx === -1) {
     for (let j = scopedChildren.length - 1; j > userManualTitleIdx; j--) {
       if (scopedChildren[j].localName === "p") {
@@ -1127,14 +1190,9 @@ export async function formatAppendices(
     }
   }
 
-  // ── Inject sectPr elements (must happen BEFORE the formatting pass) ───────────
-
   if (userManualTitleIdx !== -1) {
-    // Create empty header/footer files, register their rels and content types.
-    // Must be awaited before we build the sectPr so we have the rel IDs ready.
     const { hdrRelId, ftrRelId } = await addEmptyHeaderFooterToZip(zip);
 
-    // Inject sectPr on UM title only if it doesn't already have one.
     const umTitleEl = scopedChildren[userManualTitleIdx] as Element;
     const umTitleAlreadyHasSectPr =
       getChild(ensurePPr(umTitleEl), "sectPr") !== null;
@@ -1142,10 +1200,6 @@ export async function formatAppendices(
       injectSectPr(umTitleEl, buildNormalClosingSectPr(dom, mainSectPr));
     }
 
-    // Delete empty paragraphs immediately after the UM title — these produce
-    // blank pages. If an empty paragraph carries a sectPr it is a redundant
-    // "Section Break (Next Page)" paragraph left by the source doc; remove it
-    // too since the UM title already has the real section break.
     for (let k = userManualTitleIdx + 1; k < scopedChildren.length; k++) {
       const next = scopedChildren[k];
       if (!(next instanceof Element) || next.localName !== "p") break;
@@ -1157,11 +1211,9 @@ export async function formatAppendices(
         ) !== "";
       const hasImg = next.querySelectorAll("drawing, pict").length > 0;
       if (hasText || hasImg) break;
-      // Empty paragraph (with or without sectPr) — remove it.
       next.parentElement?.removeChild(next);
     }
 
-    // Last User Manual content paragraph closes the blank-header section
     if (userManualLastIdx !== -1) {
       injectSectPr(
         scopedChildren[userManualLastIdx] as Element,
@@ -1170,13 +1222,12 @@ export async function formatAppendices(
     }
   }
 
-  // ── MAIN FORMATTING PASS ──────────────────────────────────────────────────────
-
   const state: AppState = {
     zone: "before",
     expectingTitle: false,
     currentLetter: "",
     cvSeen: false,
+    afterContinuation: false,
   };
 
   for (let i = 0; i < scopedChildren.length; i++) {
@@ -1184,7 +1235,6 @@ export async function formatAppendices(
     if (!(child instanceof Element)) continue;
     if (child.parentElement !== body) continue;
 
-    // Tables: remove entirely in the CV zone; leave as-is everywhere else
     if (child.localName === "tbl") {
       if (state.zone === "cv") {
         child.parentElement?.removeChild(child);
@@ -1196,7 +1246,6 @@ export async function formatAppendices(
 
     if (child.localName !== "p") continue;
 
-    // ── gather text (both txbxContent-aware and raw) ──────────────────────────
     const txtClean = normalizeText(getParagraphText(child));
     const txtRaw = normalizeText(
       Array.from(child.querySelectorAll("t"))
@@ -1206,55 +1255,40 @@ export async function formatAppendices(
     const txt = txtClean || txtRaw;
     const hasDrawing = child.querySelectorAll("drawing, pict").length > 0;
 
-    // ── check whether this paragraph already carries an injected sectPr ───────
-    // sectPr-bearing paragraphs define section breaks and must never be deleted.
     const hasSectPr =
       child.querySelector(":scope > pPr > sectPr") !== null ||
       getChild(ensurePPr(child), "sectPr") !== null;
 
-    // ── CURRICULUM VITAE detection (must come before the cv-zone purge below) ──
-    // We need to detect the title FIRST so we can format/remove it, then the
-    // zone transitions to "cv" and everything after is purged.
     const isCurriculumVitae = /^curriculum\s+vitae$/iu.test(txt);
 
     if (isCurriculumVitae) {
       if (!state.cvSeen) {
-        // First CV title — format it as a standalone title page
         state.zone = "cv";
         state.expectingTitle = false;
         state.cvSeen = true;
         applyAppendicesSectionTitle(child);
       } else {
-        // Duplicate CV title — remove it entirely
         child.parentElement?.removeChild(child);
       }
       continue;
     }
 
-    // ── CV zone purge — runs before every other check ─────────────────────────
-    // After the CV title page: images are kept (centred, inline), everything
-    // else is deleted. sectPr-bearing paragraphs are never removed.
     if (state.zone === "cv") {
       if (hasSectPr) {
-        // Leave sectPr paragraphs completely alone — they define section breaks
+        // leave alone — defines section break
       } else if (hasDrawing) {
-        // Keep images: convert to inline, centre them
-        applyCVImageParagraph(child);
+        applyCVImageParagraph(child); // centred, inline, no border
       } else {
-        // Remove all text, empty lines, continuation labels, etc.
         child.parentElement?.removeChild(child);
       }
       continue;
     }
 
-    // ── pattern detection (non-CV zones only) ─────────────────────────────────
     const isAppendicesTitle = /^appendices$/iu.test(txt);
     const appendixLetterM = txt.match(/^appendix\s+([A-Z])$/iu);
     const isAppendixLetter = appendixLetterM !== null;
     const isContinuationLabel = /^continuation\s+of\s+appendix/iu.test(txt);
     const isUserManual = /^user\s+manual$/iu.test(txt);
-
-    // ── zone transitions ──────────────────────────────────────────────────────
 
     if (isAppendicesTitle) {
       state.zone = "appendices";
@@ -1267,62 +1301,52 @@ export async function formatAppendices(
       state.zone = "appendices";
       state.currentLetter = appendixLetterM![1].toUpperCase();
       state.expectingTitle = true;
+      state.afterContinuation = false;
       applyAppendixLetter(child, state.currentLetter);
       continue;
     }
 
     if (isContinuationLabel) {
       state.expectingTitle = false;
+      state.afterContinuation = true;
       applyContinuationAppendixLabel(child, state.currentLetter);
       continue;
     }
 
     if (isUserManual) {
-      // Formatted as an appendix title; sectPr was already injected in pre-pass
       state.zone = "user_manual";
       state.expectingTitle = false;
-      applyAppendixTitle(child); // UPPERCASE, 14 pt bold, centered, 3.0 line
+      applyAppendixTitle(child);
       continue;
     }
 
-    // ── empty paragraph ───────────────────────────────────────────────────────
     if (txt === "" && !hasDrawing) {
       if (!hasSectPr) applyEmptyParagraph(child);
       continue;
     }
 
-    // ── zone-specific content handling ────────────────────────────────────────
-
     if (state.zone === "user_manual") {
-      // Images in the User Manual: right-aligned, inline, 18.20 × 27 cm
       if (hasDrawing) {
         applyUserManualImageParagraph(child);
       }
-      // Non-image text in the User Manual: leave as-is
       continue;
     }
 
-    // ── appendix title (first non-empty paragraph after the letter) ───────────
     if (state.expectingTitle && txt !== "") {
       state.expectingTitle = false;
-      // If the title happens to be "User Manual", handled above already.
-      // For all other appendix titles:
       applyAppendixTitle(child);
       continue;
     }
 
-    // ── regular appendix body: images → inline + centred ─────────────────────
     if (hasDrawing && state.zone === "appendices") {
-      applyCVImageParagraph(child); // centred, inline (same as CV images)
+      const targetH = state.afterContinuation
+        ? APPENDIX_TARGET_H_CONT_EMU
+        : APPENDIX_TARGET_H_EMU;
+      applyAppendixFigureParagraph(child, targetH);
       continue;
     }
-
-    // ── all other appendix body text: leave as-is ─────────────────────────────
-    // (body prose, table captions, figures captions inside appendices are not
-    //  re-formatted by this engine — they inherit the chapter formatting)
   }
 
-  // ── Serialize and repack ──────────────────────────────────────────────────────
   const serializer = new XMLSerializer();
   zip.file("word/document.xml", serializer.serializeToString(dom));
   return zip.generateAsync({ type: "blob" }) as Promise<Blob>;
