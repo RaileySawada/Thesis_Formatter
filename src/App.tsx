@@ -12,7 +12,18 @@ import MobileSheet from "./components/MobileSheet";
 import PreviewModal from "./components/PreviewModal";
 import Toast from "./components/Toast";
 
-// ── PWA: load JSZip from CDN ───────────────────────────────────────────────
+// ── PWA: Stash the prompt IMMEDIATELY at module load time ─────────────────
+// beforeinstallprompt can fire before React even mounts, so we capture it
+// at the top level — outside any component or hook.
+let _deferredPrompt: any = null;
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  _deferredPrompt = e;
+  // Notify any mounted component
+  window.dispatchEvent(new Event("pwa-prompt-ready"));
+});
+
+// ── PWA: load JSZip from CDN ──────────────────────────────────────────────
 function useJSZip() {
   const [ready, setReady] = useState(false);
   useEffect(() => {
@@ -28,46 +39,34 @@ function useJSZip() {
   return ready;
 }
 
-// ── PWA: register service worker ───────────────────────────────────────────
+// ── PWA: register service worker ─────────────────────────────────────────
 function useServiceWorker() {
   useEffect(() => {
-    if ("serviceWorker" in navigator) {
-      window.addEventListener("load", () => {
-        navigator.serviceWorker.register("/sw.js").catch(() => {
-          // SW registration failed silently
-        });
-      });
-    }
+    if (!("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
   }, []);
 }
 
-// ── PWA: capture install prompt ────────────────────────────────────────────
-interface BeforeInstallPromptEvent extends Event {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
-}
-
+// ── PWA: Install Prompt component ─────────────────────────────────────────
 function InstallPrompt() {
-  const [deferredPrompt, setDeferredPrompt] =
-    useState<BeforeInstallPromptEvent | null>(null);
-  const [visible, setVisible] = useState(false);
+  // Initialize to true if the event already fired before this component mounted
+  const [visible, setVisible] = useState(() => _deferredPrompt !== null);
 
   useEffect(() => {
-    const handler = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e as BeforeInstallPromptEvent);
-      setVisible(true);
-    };
-    window.addEventListener("beforeinstallprompt", handler);
-    return () => window.removeEventListener("beforeinstallprompt", handler);
+    // In case the event fires after mount
+    const handler = () => setVisible(true);
+    window.addEventListener("pwa-prompt-ready", handler);
+    return () => window.removeEventListener("pwa-prompt-ready", handler);
   }, []);
 
   const handleInstall = async () => {
-    if (!deferredPrompt) return;
-    await deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === "accepted") setVisible(false);
-    setDeferredPrompt(null);
+    if (!_deferredPrompt) return;
+    _deferredPrompt.prompt();
+    const { outcome } = await _deferredPrompt.userChoice;
+    if (outcome === "accepted") {
+      _deferredPrompt = null;
+      setVisible(false);
+    }
   };
 
   if (!visible) return null;
@@ -82,16 +81,16 @@ function InstallPrompt() {
         border: "1.5px solid var(--border)",
         borderRadius: "20px",
         padding: "20px 22px",
-        boxShadow: "0 12px 40px rgba(0,0,0,0.35)",
+        boxShadow: "0 12px 40px rgba(0,0,0,0.25)",
         zIndex: 99999,
         maxWidth: "320px",
         width: "calc(100vw - 48px)",
-        fontFamily: "inherit",
       }}
     >
       {/* Close */}
       <button
         onClick={() => setVisible(false)}
+        aria-label="Dismiss"
         style={{
           position: "absolute",
           top: "12px",
@@ -103,7 +102,6 @@ function InstallPrompt() {
           cursor: "pointer",
           lineHeight: 1,
         }}
-        aria-label="Dismiss"
       >
         ✕
       </button>
@@ -119,12 +117,13 @@ function InstallPrompt() {
       >
         <img
           src="/images/logo.webp"
-          alt="ThesisFormatter"
+          alt="Manuscript Formatter"
           style={{
             width: 40,
             height: 40,
             borderRadius: 10,
             objectFit: "contain",
+            border: "1px solid var(--border)",
           }}
         />
         <div>
@@ -138,7 +137,7 @@ function InstallPrompt() {
             Install Manuscript Formatter
           </div>
           <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-            Publisher: ccc-ovprepqa.vercel.app
+            Publisher: manuscript-formatter.netlify.app
           </div>
         </div>
       </div>
@@ -159,7 +158,7 @@ function InstallPrompt() {
           color: "var(--text-soft)",
           paddingLeft: "18px",
           marginBottom: "16px",
-          lineHeight: 1.8,
+          lineHeight: 1.9,
         }}
       >
         <li>Opens in a focused window</li>
@@ -207,7 +206,7 @@ function InstallPrompt() {
   );
 }
 
-// ── Main App ───────────────────────────────────────────────────────────────
+// ── Main App ──────────────────────────────────────────────────────────────
 export default function App() {
   const jsZipReady = useJSZip();
   useServiceWorker();
@@ -308,7 +307,6 @@ export default function App() {
         blob = await formatPreliminary(currentBuffer);
         currentBuffer = await blob.arrayBuffer();
       }
-
       if (runChapters) {
         if (citationStyle === "apa") {
           blob = await formatDocxApa(currentBuffer, {
@@ -324,7 +322,6 @@ export default function App() {
         }
         currentBuffer = await blob.arrayBuffer();
       }
-
       if (runAppendices) {
         blob = await formatAppendices(currentBuffer);
       }
@@ -457,7 +454,6 @@ export default function App() {
 
         {/* Main layout */}
         <div className="flex w-full gap-6 items-start">
-          {/* Sidebar */}
           <Sidebar
             isDark={isDark}
             toggleTheme={toggleTheme}
@@ -471,7 +467,6 @@ export default function App() {
             setCitationStyle={setCitationStyle}
           />
 
-          {/* Main content */}
           <main className="min-w-0 flex-1 space-y-5">
             {/* Upload card */}
             <div
@@ -499,7 +494,6 @@ export default function App() {
                   className="flex shrink-0 gap-2"
                   style={{ position: "relative", zIndex: 10 }}
                 >
-                  {/* Download Template dropdown */}
                   <div className="relative" ref={templateDropdownRef}>
                     <button
                       type="button"
@@ -620,7 +614,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Upload zone */}
               <UploadZone file={file} setFile={setFile} />
 
               {/* Badge */}
@@ -706,7 +699,6 @@ export default function App() {
 
             {/* Coverage + Status row */}
             <div className="grid gap-5 xl:grid-cols-2">
-              {/* Coverage card */}
               <div
                 className="rounded-3xl border p-6 transition-colors duration-300"
                 style={{
@@ -814,7 +806,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Status panel */}
               <StatusPanel
                 selectedSections={selectedSections}
                 sectionLabels={sectionLabels}
