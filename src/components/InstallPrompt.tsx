@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -52,7 +52,6 @@ export default function InstallPrompt() {
   const [closing, setClosing] = useState(false);
   const [installed, setInstalled] = useState(false);
   const [logoError, setLogoError] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Register service worker — errors swallowed so the console stays clean
   useEffect(() => {
@@ -75,19 +74,13 @@ export default function InstallPrompt() {
     if (isStandalone() || !isMobile() || ssGet(DISMISS_KEY)) return;
 
     const handler = (e: Event) => {
-      // preventDefault is intentional on mobile — it suppresses the browser's
-      // own mini install bar so our bottom sheet can appear instead.
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
-      // Wait for the page to finish its first render before sliding in
-      timerRef.current = setTimeout(() => setVisible(true), 1200);
+      setVisible(true);
     };
 
     window.addEventListener("beforeinstallprompt", handler);
-    return () => {
-      window.removeEventListener("beforeinstallprompt", handler);
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
+    return () => window.removeEventListener("beforeinstallprompt", handler);
   }, []);
 
   const dismiss = (remember: boolean) => {
@@ -332,7 +325,7 @@ export default function InstallPrompt() {
                     text: "Instant access from your home screen",
                   },
                   {
-                    icon: "fa-wifi-slash",
+                    icon: "fa-floppy-disk",
                     text: "Works offline — no internet needed",
                   },
                   {
