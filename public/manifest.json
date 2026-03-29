@@ -1,21 +1,25 @@
 {
-  "name": "ManuscriptFormatter",
-  "short_name": "ManuscriptFormatter",
-  "description": "Format your thesis manuscript with ease",
+  "name": "Manuscript Formatter",
+  "short_name": "ManuscriptFmt",
+  "description": "Automatically format your thesis manuscript to City College of Calamba standards.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
+  "background_color": "#f0f4ff",
   "theme_color": "#1e40af",
+  "orientation": "portrait-primary",
   "icons": [
     {
       "src": "/images/icon-192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
       "src": "/images/icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }

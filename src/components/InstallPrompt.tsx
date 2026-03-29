@@ -10,13 +10,13 @@ export default function InstallPrompt() {
     useState<BeforeInstallPromptEvent | null>(null);
   const [showPrompt, setShowPrompt] = useState(false);
 
+  // Capture the install prompt before the browser shows its own
   useEffect(() => {
     const handler = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
       setShowPrompt(true);
     };
-
     window.addEventListener("beforeinstallprompt", handler);
     return () => window.removeEventListener("beforeinstallprompt", handler);
   }, []);
@@ -24,7 +24,9 @@ export default function InstallPrompt() {
   // Register service worker
   useEffect(() => {
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js");
+      navigator.serviceWorker.register("/sw.js").catch(() => {
+        /* SW registration failed silently */
+      });
     }
   }, []);
 
@@ -44,32 +46,36 @@ export default function InstallPrompt() {
         position: "fixed",
         bottom: "24px",
         right: "24px",
-        background: "#1e1e1e",
-        color: "#fff",
-        borderRadius: "12px",
-        padding: "20px 24px",
-        boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
-        zIndex: 9999,
+        background: "var(--surface-raised)",
+        border: "1.5px solid var(--border)",
+        borderRadius: "20px",
+        padding: "20px 22px",
+        boxShadow: "0 12px 40px rgba(0,0,0,0.25)",
+        zIndex: 99999,
         maxWidth: "320px",
-        fontFamily: "sans-serif",
+        width: "calc(100vw - 48px)",
       }}
     >
+      {/* Close button */}
       <button
         onClick={() => setShowPrompt(false)}
+        aria-label="Dismiss"
         style={{
           position: "absolute",
-          top: "10px",
+          top: "12px",
           right: "14px",
           background: "none",
           border: "none",
-          color: "#aaa",
-          fontSize: "18px",
+          color: "var(--text-muted)",
+          fontSize: "16px",
           cursor: "pointer",
+          lineHeight: 1,
         }}
       >
         ✕
       </button>
 
+      {/* Header */}
       <div
         style={{
           display: "flex",
@@ -78,60 +84,72 @@ export default function InstallPrompt() {
           marginBottom: "12px",
         }}
       >
-        {/* Replace with your actual app icon */}
-        <div
+        <img
+          src="/images/logo.webp"
+          alt="Manuscript Formatter"
           style={{
             width: 40,
             height: 40,
-            borderRadius: 8,
-            background: "#1e40af",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 20,
+            borderRadius: 10,
+            objectFit: "contain",
+            border: "1px solid var(--border)",
           }}
-        >
-          📄
-        </div>
+        />
         <div>
-          <div style={{ fontWeight: 700, fontSize: "15px" }}>
-            Install ThesisFormatter
+          <div
+            style={{
+              fontWeight: 700,
+              fontSize: "14px",
+              color: "var(--text-primary)",
+            }}
+          >
+            Install Manuscript Formatter
           </div>
-          <div style={{ fontSize: "12px", color: "#aaa" }}>
-            Publisher: your-domain.com
+          <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+            Publisher: manuscript-formatter.netlify.app
           </div>
         </div>
       </div>
 
-      <p style={{ fontSize: "13px", marginBottom: "10px" }}>
+      {/* Body */}
+      <p
+        style={{
+          fontSize: "12px",
+          color: "var(--text-soft)",
+          marginBottom: "8px",
+        }}
+      >
         Use this site often? Install the app which:
       </p>
       <ul
         style={{
-          fontSize: "13px",
+          fontSize: "12px",
+          color: "var(--text-soft)",
           paddingLeft: "18px",
           marginBottom: "16px",
-          lineHeight: 1.7,
+          lineHeight: 1.9,
         }}
       >
         <li>Opens in a focused window</li>
-        <li>Has quick access options like pin to taskbar</li>
-        <li>Works offline and syncs across devices</li>
+        <li>Has quick access like pin to taskbar</li>
+        <li>Works offline on your device</li>
       </ul>
 
+      {/* Actions */}
       <div style={{ display: "flex", gap: "10px" }}>
         <button
           onClick={handleInstall}
           style={{
             flex: 1,
             padding: "10px",
-            borderRadius: "8px",
-            background: "#1e40af",
+            borderRadius: "12px",
+            background: "var(--accent)",
             color: "#fff",
             border: "none",
-            fontWeight: 600,
+            fontWeight: 700,
+            fontSize: "13px",
             cursor: "pointer",
-            fontSize: "14px",
+            boxShadow: "0 4px 12px var(--accent-glow)",
           }}
         >
           Install
@@ -141,12 +159,13 @@ export default function InstallPrompt() {
           style={{
             flex: 1,
             padding: "10px",
-            borderRadius: "8px",
+            borderRadius: "12px",
             background: "transparent",
-            color: "#fff",
-            border: "1px solid #555",
+            color: "var(--text-secondary)",
+            border: "1.5px solid var(--border)",
+            fontWeight: 600,
+            fontSize: "13px",
             cursor: "pointer",
-            fontSize: "14px",
           }}
         >
           Not now
