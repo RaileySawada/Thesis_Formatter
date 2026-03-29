@@ -1,33 +1,49 @@
 import { useEffect, useRef, useState } from "react";
 
-// Fallback SVG data-URI shown when logo.webp fails to load (avoids net::ERR_FAILED noise)
-const LOGO_FALLBACK =
-  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='10' fill='%231e40af'/%3E%3Ctext x='50%25' y='54%25' dominant-baseline='middle' text-anchor='middle' font-size='22' fill='white'%3E📄%3C/text%3E%3C/svg%3E";
-
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 }
 
-/** Returns true if the device is likely a phone/tablet. */
-function isMobileDevice(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    window.matchMedia("(max-width: 768px)").matches
-  );
-}
+// Inline SVG fallback — prevents a failed network request for logo.webp
+const LOGO_FALLBACK =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='10' fill='%231e40af'/%3E%3Ctext x='50%25' y='55%25' dominant-baseline='middle' text-anchor='middle' font-size='24' fill='white'%3E%F0%9F%93%84%3C/text%3E%3C/svg%3E";
 
-/** Returns true if already running as an installed PWA. */
+const DISMISS_KEY = "mf-install-dismissed";
+
+/** true when already running as an installed PWA */
 function isStandalone(): boolean {
   return (
-    typeof window !== "undefined" &&
-    (window.matchMedia("(display-mode: standalone)").matches ||
-      ("standalone" in window.navigator &&
-        (window.navigator as { standalone?: boolean }).standalone === true))
+    window.matchMedia("(display-mode: standalone)").matches ||
+    ("standalone" in window.navigator &&
+      (window.navigator as { standalone?: boolean }).standalone === true)
   );
 }
 
-const DISMISS_KEY = "install-prompt-dismissed";
+/**
+ * true only on phone / tablet.
+ * Uses 1023px to match the app's Tailwind `lg` breakpoint (1024px)
+ * so the sheet never appears when the desktop sidebar is visible.
+ */
+function isMobile(): boolean {
+  return window.matchMedia("(max-width: 1023px)").matches;
+}
+
+/** Edge / Firefox Tracking Prevention can block sessionStorage — always wrap */
+function ssGet(key: string): string | null {
+  try {
+    return sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+function ssSet(key: string, val: string): void {
+  try {
+    sessionStorage.setItem(key, val);
+  } catch {
+    /* blocked — safe to ignore */
+  }
+}
 
 export default function InstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] =
@@ -38,29 +54,32 @@ export default function InstallPrompt() {
   const [logoError, setLogoError] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Register service worker — errors suppressed to keep the console clean
+  // Register service worker — errors swallowed so the console stays clean
   useEffect(() => {
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").catch(() => {
-        // Registration can fail in dev or when sw.js is missing; safe to ignore
-      });
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
     }
   }, []);
 
-  // Capture the beforeinstallprompt event — mobile only
+  /**
+   * Attach the beforeinstallprompt listener ONLY when we're on mobile.
+   *
+   * Why this matters for the console warning:
+   * The "Banner not shown: beforeinstallpromptEvent.preventDefault() called"
+   * message is emitted by the browser the moment we call e.preventDefault().
+   * By never attaching the listener on desktop, we never call preventDefault
+   * on desktop, so the warning never appears there.
+   */
   useEffect(() => {
-    // Skip if: already installed, running standalone, or not mobile
-    if (
-      isStandalone() ||
-      !isMobileDevice() ||
-      sessionStorage.getItem(DISMISS_KEY)
-    )
-      return;
+    // Exit early on desktop, standalone PWA, or already-dismissed session
+    if (isStandalone() || !isMobile() || ssGet(DISMISS_KEY)) return;
 
     const handler = (e: Event) => {
+      // preventDefault is intentional on mobile — it suppresses the browser's
+      // own mini install bar so our bottom sheet can appear instead.
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
-      // Small delay so the page finishes loading before showing the sheet
+      // Wait for the page to finish its first render before sliding in
       timerRef.current = setTimeout(() => setVisible(true), 1200);
     };
 
@@ -71,9 +90,9 @@ export default function InstallPrompt() {
     };
   }, []);
 
-  const dismiss = (remember = true) => {
+  const dismiss = (remember: boolean) => {
     setClosing(true);
-    if (remember) sessionStorage.setItem(DISMISS_KEY, "1");
+    if (remember) ssSet(DISMISS_KEY, "1");
     setTimeout(() => {
       setVisible(false);
       setClosing(false);
@@ -87,7 +106,7 @@ export default function InstallPrompt() {
     setDeferredPrompt(null);
     if (outcome === "accepted") {
       setInstalled(true);
-      setTimeout(() => dismiss(true), 1600);
+      setTimeout(() => dismiss(true), 1800);
     } else {
       dismiss(false);
     }
@@ -97,7 +116,7 @@ export default function InstallPrompt() {
 
   return (
     <>
-      {/* Backdrop */}
+      {/* ── Backdrop ── */}
       <div
         onClick={() => dismiss(false)}
         style={{
@@ -112,7 +131,7 @@ export default function InstallPrompt() {
         }}
       />
 
-      {/* Sheet */}
+      {/* ── Bottom sheet ── */}
       <div
         role="dialog"
         aria-modal="true"
@@ -126,7 +145,7 @@ export default function InstallPrompt() {
           background: "var(--surface)",
           borderTop: "1.5px solid var(--border)",
           borderRadius: "24px 24px 0 0",
-          padding: "0 0 calc(env(safe-area-inset-bottom, 0px) + 20px)",
+          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 20px)",
           boxShadow: "0 -8px 48px rgba(0,0,0,0.35)",
           transform: closing ? "translateY(100%)" : "translateY(0)",
           transition: "transform 0.34s cubic-bezier(0.32,0.72,0,1)",
@@ -161,7 +180,7 @@ export default function InstallPrompt() {
           />
         </div>
 
-        {/* Close button */}
+        {/* Close × */}
         <button
           onClick={() => dismiss(false)}
           aria-label="Dismiss"
@@ -180,7 +199,6 @@ export default function InstallPrompt() {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            lineHeight: 1,
           }}
         >
           <i className="fa-solid fa-xmark" />
@@ -188,7 +206,7 @@ export default function InstallPrompt() {
 
         <div style={{ padding: "12px 22px 0" }}>
           {installed ? (
-            /* ── Installed confirmation ── */
+            /* ── Success confirmation ── */
             <div
               style={{
                 display: "flex",
@@ -204,12 +222,12 @@ export default function InstallPrompt() {
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  width: 52,
-                  height: 52,
+                  width: 56,
+                  height: 56,
                   borderRadius: "50%",
                   background: "rgba(16,185,129,0.15)",
                   color: "#10b981",
-                  fontSize: 22,
+                  fontSize: 24,
                 }}
               >
                 <i className="fa-solid fa-circle-check" />
@@ -236,7 +254,7 @@ export default function InstallPrompt() {
               </div>
             </div>
           ) : (
-            /* ── Install prompt ── */
+            /* ── Prompt ── */
             <>
               {/* Header */}
               <div
@@ -299,7 +317,7 @@ export default function InstallPrompt() {
                 </div>
               </div>
 
-              {/* Feature pills */}
+              {/* Feature rows */}
               <div
                 style={{
                   display: "flex",
@@ -384,8 +402,7 @@ export default function InstallPrompt() {
                     gap: 8,
                   }}
                 >
-                  <i className="fa-solid fa-download" />
-                  Install App
+                  <i className="fa-solid fa-download" /> Install App
                 </button>
                 <button
                   onClick={() => dismiss(true)}
