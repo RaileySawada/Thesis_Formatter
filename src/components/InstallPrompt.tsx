@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 
+// Fallback SVG data-URI shown when logo.webp fails to load (avoids net::ERR_FAILED noise)
+const LOGO_FALLBACK =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='10' fill='%231e40af'/%3E%3Ctext x='50%25' y='54%25' dominant-baseline='middle' text-anchor='middle' font-size='22' fill='white'%3E📄%3C/text%3E%3C/svg%3E";
+
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
@@ -31,13 +35,14 @@ export default function InstallPrompt() {
   const [visible, setVisible] = useState(false);
   const [closing, setClosing] = useState(false);
   const [installed, setInstalled] = useState(false);
+  const [logoError, setLogoError] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Register service worker
+  // Register service worker — errors suppressed to keep the console clean
   useEffect(() => {
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {
-        /* SW registration failed silently */
+        // Registration can fail in dev or when sw.js is missing; safe to ignore
       });
     }
   }, []);
@@ -243,8 +248,9 @@ export default function InstallPrompt() {
                 }}
               >
                 <img
-                  src="/images/logo.webp"
+                  src={logoError ? LOGO_FALLBACK : "/images/logo.webp"}
                   alt="Manuscript Formatter"
+                  onError={() => setLogoError(true)}
                   style={{
                     width: 48,
                     height: 48,
@@ -288,7 +294,7 @@ export default function InstallPrompt() {
                       marginTop: 2,
                     }}
                   >
-                    manuscript-formatter.netlify.app
+                    By Railey Dela Peña · CCC OVPREPQA
                   </p>
                 </div>
               </div>
