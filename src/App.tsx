@@ -12,7 +12,7 @@ import MobileSheet from "./components/MobileSheet";
 import PreviewModal from "./components/PreviewModal";
 import Toast from "./components/Toast";
 
-// Load JSZip from CDN
+// ── PWA: load JSZip from CDN ───────────────────────────────────────────────
 function useJSZip() {
   const [ready, setReady] = useState(false);
   useEffect(() => {
@@ -28,10 +28,191 @@ function useJSZip() {
   return ready;
 }
 
+// ── PWA: register service worker ───────────────────────────────────────────
+function useServiceWorker() {
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("/sw.js").catch(() => {
+          // SW registration failed silently
+        });
+      });
+    }
+  }, []);
+}
+
+// ── PWA: capture install prompt ────────────────────────────────────────────
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+}
+
+function InstallPrompt() {
+  const [deferredPrompt, setDeferredPrompt] =
+    useState<BeforeInstallPromptEvent | null>(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e as BeforeInstallPromptEvent);
+      setVisible(true);
+    };
+    window.addEventListener("beforeinstallprompt", handler);
+    return () => window.removeEventListener("beforeinstallprompt", handler);
+  }, []);
+
+  const handleInstall = async () => {
+    if (!deferredPrompt) return;
+    await deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === "accepted") setVisible(false);
+    setDeferredPrompt(null);
+  };
+
+  if (!visible) return null;
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        bottom: "24px",
+        right: "24px",
+        background: "var(--surface-raised)",
+        border: "1.5px solid var(--border)",
+        borderRadius: "20px",
+        padding: "20px 22px",
+        boxShadow: "0 12px 40px rgba(0,0,0,0.35)",
+        zIndex: 99999,
+        maxWidth: "320px",
+        width: "calc(100vw - 48px)",
+        fontFamily: "inherit",
+      }}
+    >
+      {/* Close */}
+      <button
+        onClick={() => setVisible(false)}
+        style={{
+          position: "absolute",
+          top: "12px",
+          right: "14px",
+          background: "none",
+          border: "none",
+          color: "var(--text-muted)",
+          fontSize: "16px",
+          cursor: "pointer",
+          lineHeight: 1,
+        }}
+        aria-label="Dismiss"
+      >
+        ✕
+      </button>
+
+      {/* Header */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "12px",
+          marginBottom: "12px",
+        }}
+      >
+        <img
+          src="/images/logo.webp"
+          alt="ThesisFormatter"
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 10,
+            objectFit: "contain",
+          }}
+        />
+        <div>
+          <div
+            style={{
+              fontWeight: 700,
+              fontSize: "14px",
+              color: "var(--text-primary)",
+            }}
+          >
+            Install Manuscript Formatter
+          </div>
+          <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+            Publisher: ccc-ovprepqa.vercel.app
+          </div>
+        </div>
+      </div>
+
+      {/* Body */}
+      <p
+        style={{
+          fontSize: "12px",
+          color: "var(--text-soft)",
+          marginBottom: "8px",
+        }}
+      >
+        Use this site often? Install the app which:
+      </p>
+      <ul
+        style={{
+          fontSize: "12px",
+          color: "var(--text-soft)",
+          paddingLeft: "18px",
+          marginBottom: "16px",
+          lineHeight: 1.8,
+        }}
+      >
+        <li>Opens in a focused window</li>
+        <li>Has quick access like pin to taskbar</li>
+        <li>Works offline on your device</li>
+      </ul>
+
+      {/* Actions */}
+      <div style={{ display: "flex", gap: "10px" }}>
+        <button
+          onClick={handleInstall}
+          style={{
+            flex: 1,
+            padding: "10px",
+            borderRadius: "12px",
+            background: "var(--accent)",
+            color: "#fff",
+            border: "none",
+            fontWeight: 700,
+            fontSize: "13px",
+            cursor: "pointer",
+            boxShadow: "0 4px 12px var(--accent-glow)",
+          }}
+        >
+          Install
+        </button>
+        <button
+          onClick={() => setVisible(false)}
+          style={{
+            flex: 1,
+            padding: "10px",
+            borderRadius: "12px",
+            background: "transparent",
+            color: "var(--text-secondary)",
+            border: "1.5px solid var(--border)",
+            fontWeight: 600,
+            fontSize: "13px",
+            cursor: "pointer",
+          }}
+        >
+          Not now
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Main App ───────────────────────────────────────────────────────────────
 export default function App() {
   const jsZipReady = useJSZip();
+  useServiceWorker();
 
-  // ── theme ──────────────────────────────────────────────────────
+  // ── theme ────────────────────────────────────────────────────────────────
   const [isDark, setIsDark] = useState(() => {
     return (localStorage.getItem("thesis_theme") ?? "light") === "dark";
   });
@@ -47,7 +228,7 @@ export default function App() {
 
   const toggleTheme = useCallback(() => setIsDark((d) => !d), []);
 
-  // ── sections ───────────────────────────────────────────────────
+  // ── sections ─────────────────────────────────────────────────────────────
   const [selectedSections, setSelectedSections] = useState<string[]>([
     "preliminary",
     "chapters",
@@ -57,14 +238,14 @@ export default function App() {
   const toggleSection = useCallback((val: string) => {
     setSelectedSections((prev) => {
       if (prev.includes(val)) {
-        if (prev.length <= 1) return prev; // must keep at least one
+        if (prev.length <= 1) return prev;
         return prev.filter((s) => s !== val);
       }
       return [...prev, val];
     });
   }, []);
 
-  // ── rules ──────────────────────────────────────────────────────
+  // ── rules ────────────────────────────────────────────────────────────────
   const [enabledRules, setEnabledRules] = useState<string[]>(
     RULES_DEF.map(([val]) => val),
   );
@@ -75,12 +256,12 @@ export default function App() {
     );
   }, []);
 
-  // ── file ───────────────────────────────────────────────────────
+  // ── file ─────────────────────────────────────────────────────────────────
   const [file, setFile] = useState<File | null>(null);
   const [rulesOpen, setRulesOpen] = useState(true);
   const [citationStyle, setCitationStyle] = useState<CitationStyle>("ieee");
 
-  // ── modals ─────────────────────────────────────────────────────
+  // ── modals ───────────────────────────────────────────────────────────────
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [templateDropdownOpen, setTemplateDropdownOpen] = useState(false);
@@ -100,7 +281,7 @@ export default function App() {
     return () => document.removeEventListener("mousedown", handler);
   }, [templateDropdownOpen]);
 
-  // ── processing ─────────────────────────────────────────────────
+  // ── processing ───────────────────────────────────────────────────────────
   const [processing, setProcessing] = useState(false);
   const [toast, setToast] = useState<ToastMsg | null>(null);
 
@@ -120,7 +301,6 @@ export default function App() {
       const runChapters = selectedSections.includes("chapters");
       const runAppendices = selectedSections.includes("appendices");
 
-      // Pipeline: each engine receives the output of the previous one
       let currentBuffer = await file.arrayBuffer();
       let blob: Blob | null = null;
 
@@ -267,7 +447,6 @@ export default function App() {
                 background: "var(--accent-subtle)",
                 border: "1.5px solid var(--accent-muted)",
                 color: "var(--accent)",
-                boxShadow: "0 0 0 0 transparent",
               }}
             >
               <i className="fa-solid fa-sliders text-sm" />
@@ -684,6 +863,9 @@ export default function App() {
           onDismiss={() => setToast(null)}
         />
       )}
+
+      {/* PWA Install Prompt */}
+      <InstallPrompt />
     </div>
   );
 }
