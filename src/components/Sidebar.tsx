@@ -61,6 +61,9 @@ export default function Sidebar({
           src="/images/logo.webp"
           alt="Manuscript Formatter"
           className="h-10 w-10 object-contain shrink-0 rounded-xl"
+          style={{
+            filter: isDark ? "brightness(0) invert(1)" : "",
+          }}
         />
         <div>
           <p

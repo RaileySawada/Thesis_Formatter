@@ -5,6 +5,10 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 }
 
+interface Props {
+  isDark: boolean;
+}
+
 // Inline SVG fallback — prevents a failed network request for logo.webp
 const LOGO_FALLBACK =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='10' fill='%231e40af'/%3E%3Ctext x='50%25' y='55%25' dominant-baseline='middle' text-anchor='middle' font-size='24' fill='white'%3E%F0%9F%93%84%3C/text%3E%3C/svg%3E";
@@ -45,7 +49,7 @@ function ssSet(key: string, val: string): void {
   }
 }
 
-export default function InstallPrompt() {
+export default function InstallPrompt({ isDark }: Props) {
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
   const [visible, setVisible] = useState(false);
@@ -263,12 +267,14 @@ export default function InstallPrompt() {
                   alt="Manuscript Formatter"
                   onError={() => setLogoError(true)}
                   style={{
-                    width: 48,
-                    height: 48,
+                    width: 44,
+                    height: 44,
+                    padding: 4,
                     borderRadius: 12,
                     objectFit: "contain",
                     border: "1px solid var(--border)",
                     flexShrink: 0,
+                    filter: isDark ? "brightness(0) invert(1)" : "none",
                   }}
                 />
                 <div>

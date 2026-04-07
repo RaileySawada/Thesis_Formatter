@@ -227,7 +227,10 @@ export default function App() {
             <img
               src="/images/logo.webp"
               alt="Manuscript Formatter"
-              className="h-8 w-8 object-contain rounded-xl"
+              className="h-10 w-10 object-contain shrink-0 rounded-xl"
+              style={{
+                filter: isDark ? "brightness(0) invert(1)" : "",
+              }}
             />
             <span
               className="text-[11px] font-bold uppercase tracking-[0.2em]"
@@ -683,7 +686,7 @@ export default function App() {
       )}
 
       {/* PWA Install Prompt */}
-      <InstallPrompt />
+      <InstallPrompt isDark={isDark} />
     </div>
   );
 }
