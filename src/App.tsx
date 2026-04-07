@@ -226,17 +226,17 @@ export default function App() {
           <div className="flex items-center gap-2">
             <img
               src="/images/logo.webp"
-              alt="Manuscript Formatter"
+              alt="e-Formatter"
               className="h-10 w-10 object-contain shrink-0 rounded-xl"
               style={{
                 filter: isDark ? "brightness(0) invert(1)" : "",
               }}
             />
             <span
-              className="text-[11px] font-bold uppercase tracking-[0.2em]"
+              className="text-[11px] font-bold tracking-[0.2em]"
               style={{ color: "var(--accent)" }}
             >
-              Manuscript Formatter
+              e-<span className="uppercase">Formatter</span>
             </span>
           </div>
           <div className="flex items-center gap-2">

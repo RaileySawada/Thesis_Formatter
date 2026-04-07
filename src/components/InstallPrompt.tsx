@@ -132,7 +132,7 @@ export default function InstallPrompt({ isDark }: Props) {
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Install Manuscript Formatter"
+        aria-label="Install e-Formatter"
         style={{
           position: "fixed",
           bottom: 0,
@@ -246,7 +246,7 @@ export default function InstallPrompt({ isDark }: Props) {
                     marginTop: 4,
                   }}
                 >
-                  Manuscript Formatter is now on your home screen.
+                  e-Formatter is now on your home screen.
                 </p>
               </div>
             </div>
@@ -264,7 +264,7 @@ export default function InstallPrompt({ isDark }: Props) {
               >
                 <img
                   src={logoError ? LOGO_FALLBACK : "/images/logo.webp"}
-                  alt="Manuscript Formatter"
+                  alt="e-Formatter"
                   onError={() => setLogoError(true)}
                   style={{
                     width: 44,
@@ -302,7 +302,7 @@ export default function InstallPrompt({ isDark }: Props) {
                       lineHeight: 1.2,
                     }}
                   >
-                    Manuscript Formatter
+                    e-Formatter
                   </p>
                   <p
                     style={{

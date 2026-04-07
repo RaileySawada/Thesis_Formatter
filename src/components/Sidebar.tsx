@@ -59,7 +59,7 @@ export default function Sidebar({
       <div className="flex items-center gap-3 pb-1">
         <img
           src="/images/logo.webp"
-          alt="Manuscript Formatter"
+          alt="e-Formatter"
           className="h-10 w-10 object-contain shrink-0 rounded-xl"
           style={{
             filter: isDark ? "brightness(0) invert(1)" : "",
