@@ -1021,7 +1021,11 @@ function formatAbstractTable(tbl: Element) {
 
 export async function formatPreliminary(
   arrayBuffer: ArrayBuffer,
+  options?: { rules?: string[] },
 ): Promise<Blob> {
+  const rules: Record<string, boolean> = {};
+  for (const r of options?.rules ?? []) rules[r] = true;
+
   const JSZip = (window as any).JSZip;
   if (!JSZip) throw new Error("JSZip not loaded");
 

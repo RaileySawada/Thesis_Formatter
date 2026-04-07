@@ -797,7 +797,7 @@ function applyChapterLabel(p: Element, rules: Rules) {
   writePAlignment(p, "center");
   writePIndent(p, 0);
   if (rules.spacing) writePSpacing(p, 0, 0, 480);
-  writePageBreakBefore(p, true);
+  if (rules.pagination) writePageBreakBefore(p, true);
   writeRuns(p, "Garamond", 28, true, false);
   writePPrRPr(p, "Garamond", 28, true, false);
 }
@@ -871,8 +871,9 @@ function applyBodyParagraph(p: Element, rules: Rules, beforeSpacing = 0) {
   stripLeadingTextWhitespace(p);
   stripTrailingTextWhitespace(p);
   if (rules.alignment) writePAlignment(p, "both");
-  writePIndent(p, 720);
-  writePSpacing(p, beforeSpacing, 0, 480);
+  if (rules.indentation) writePIndent(p, 720);
+  else writePIndent(p, 0);
+  if (rules.spacing) writePSpacing(p, beforeSpacing, 0, 480);
   removePBdr(p);
   writeRuns(p, "Garamond", 24, null, null);
   writePPrRPr(p, "Garamond", 24, false, false);
@@ -886,7 +887,7 @@ function applyReferenceEntry(p: Element, rules: Rules) {
   if (rules.alignment) writePAlignment(p, "both");
   if (rules.indentation) writePHangingIndent(p, 720, 720);
   else writePIndent(p, 0);
-  writePSpacing(p, 0, 0, 240);
+  if (rules.spacing) writePSpacing(p, 0, 0, 240);
   writeRuns(p, "Garamond", 22, false, false);
   writePPrRPr(p, "Garamond", 22, false, false);
 }
@@ -937,7 +938,7 @@ function applyListParagraph(p: Element, rules: Rules) {
   stripTrailingTextWhitespace(p);
 
   if (rules.alignment) writePAlignment(p, "both");
-  writePSpacing(p, 0, 0, 480);
+  if (rules.spacing) writePSpacing(p, 0, 0, 480);
 
   // Write explicit ind to override whatever the numbering definition says.
   // CRITICAL: ind must be inserted AFTER numPr in the pPr child order.
@@ -974,9 +975,9 @@ function applyFigureCaption(p: Element, rules: Rules) {
   stripLeadingArrowRuns(p);
   stripLeadingTextWhitespace(p);
   stripTrailingTextWhitespace(p);
-  writePAlignment(p, "center");
-  writePIndent(p, 0);
-  writePSpacing(p, 0, 0, 480);
+  if (rules.alignment) writePAlignment(p, "center");
+  if (rules.indentation) writePIndent(p, 0);
+  if (rules.spacing) writePSpacing(p, 0, 0, 480);
   removePBdr(p);
   ensureTrailingPeriod(p);
   writeRuns(p, "Garamond", 24, false, false);
@@ -989,9 +990,9 @@ function applyTableCaption(p: Element, rules: Rules) {
   stripLeadingArrowRuns(p);
   stripLeadingTextWhitespace(p);
   stripTrailingTextWhitespace(p);
-  writePAlignment(p, "left");
-  writePIndent(p, 0);
-  writePSpacing(p, 0, 0, 240);
+  if (rules.alignment) writePAlignment(p, "left");
+  if (rules.indentation) writePIndent(p, 0);
+  if (rules.spacing) writePSpacing(p, 0, 0, 240);
   removePBdr(p);
   ensureTrailingPeriod(p);
   writeRuns(p, "Garamond", 24, false, false);

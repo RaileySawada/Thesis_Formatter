@@ -131,7 +131,7 @@ export default function App() {
       let blob: Blob | null = null;
 
       if (runPreliminary) {
-        blob = await formatPreliminary(currentBuffer);
+        blob = await formatPreliminary(currentBuffer, { rules: enabledRules });
         currentBuffer = await blob.arrayBuffer();
       }
       if (runChapters) {
@@ -150,7 +150,7 @@ export default function App() {
         currentBuffer = await blob.arrayBuffer();
       }
       if (runAppendices) {
-        blob = await formatAppendices(currentBuffer);
+        blob = await formatAppendices(currentBuffer, { rules: enabledRules });
       }
 
       const docxMime =
