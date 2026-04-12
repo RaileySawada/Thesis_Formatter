@@ -15,9 +15,12 @@ const WP_NS =
   "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing";
 const A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main";
 
+import type { FormattingConfig } from "../constants";
+
 export interface ApaFormatOptions {
   sections: string[];
   rules: string[];
+  config: FormattingConfig;
 }
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -144,6 +147,19 @@ function chapterToInt(token: string): number {
     }
   }
   return result;
+}
+
+function ptsToHalfPts(pts: number): number {
+  return Math.round(pts * 2);
+}
+function linesToTwips(lines: number): number {
+  return Math.round(lines * 240);
+}
+function inchesToTwips(inches: number): number {
+  return Math.round(inches * 1440);
+}
+function ptsToEMU(pts: number): number {
+  return Math.round(pts * 12700);
 }
 
 // ─── property writers ────────────────────────────────────────────────────────
@@ -616,7 +632,7 @@ function applyEmptyParagraph(p: Element) {
   });
 }
 
-function applyReferenceEmptyLine(p: Element) {
+function applyReferenceEmptyLine(p: Element, config: FormattingConfig) {
   const pPr = ensurePPr(p);
   for (const tag of [
     "pStyle",
@@ -637,7 +653,7 @@ function applyReferenceEmptyLine(p: Element) {
   const sp = wElem(p.ownerDocument!, "spacing");
   setWAttr(sp, "before", "0");
   setWAttr(sp, "after", "0");
-  setWAttr(sp, "line", "240");
+  setWAttr(sp, "line", String(linesToTwips(config.references.lineSpacing)));
   setWAttr(sp, "lineRule", "auto");
   setWAttr(sp, "beforeAutospacing", "0");
   setWAttr(sp, "afterAutospacing", "0");
@@ -646,12 +662,13 @@ function applyReferenceEmptyLine(p: Element) {
   const rPr = wElem(p.ownerDocument!, "rPr");
   const rFonts = wElem(p.ownerDocument!, "rFonts");
   for (const a of ["ascii", "hAnsi", "eastAsia", "cs"])
-    setWAttr(rFonts, a, "Garamond");
+    setWAttr(rFonts, a, config.references.fontFamily);
   rPr.appendChild(rFonts);
+  const sizeVal = String(ptsToHalfPts(config.references.fontSize));
   const szEl = wElem(p.ownerDocument!, "sz");
-  setWAttr(szEl, "val", "22");
+  setWAttr(szEl, "val", sizeVal);
   const szCs = wElem(p.ownerDocument!, "szCs");
-  setWAttr(szCs, "val", "22");
+  setWAttr(szCs, "val", sizeVal);
   rPr.appendChild(szEl);
   rPr.appendChild(szCs);
   pPr.appendChild(rPr);
@@ -683,13 +700,17 @@ function buildZeroHeightPageBreakP(doc: Document): Element {
   return p;
 }
 
-function buildContinuationP(doc: Document, label: string): Element {
+function buildContinuationP(
+  doc: Document,
+  label: string,
+  config: FormattingConfig,
+): Element {
   const contP = wElem(doc, "p");
   const pPr = wElem(doc, "pPr");
   contP.appendChild(pPr);
 
   const jc = wElem(doc, "jc");
-  setWAttr(jc, "val", "left");
+  setWAttr(jc, "val", config.tableContinuation.alignment);
   pPr.appendChild(jc);
   const ind = wElem(doc, "ind");
   setWAttr(ind, "firstLine", "0");
@@ -699,7 +720,7 @@ function buildContinuationP(doc: Document, label: string): Element {
   const sp = wElem(doc, "spacing");
   setWAttr(sp, "before", "0");
   setWAttr(sp, "after", "0");
-  setWAttr(sp, "line", "240");
+  setWAttr(sp, "line", String(linesToTwips(config.tableContinuation.lineSpacing)));
   setWAttr(sp, "lineRule", "auto");
   setWAttr(sp, "beforeAutospacing", "0");
   setWAttr(sp, "afterAutospacing", "0");
@@ -709,15 +730,22 @@ function buildContinuationP(doc: Document, label: string): Element {
     const rPr = wElem(doc, "rPr");
     const rFonts = wElem(doc, "rFonts");
     for (const a of ["ascii", "hAnsi", "eastAsia", "cs"])
-      setWAttr(rFonts, a, "Garamond");
+      setWAttr(rFonts, a, config.tableContinuation.fontFamily);
     rPr.appendChild(rFonts);
-    rPr.appendChild(wElem(doc, "i"));
-    rPr.appendChild(wElem(doc, "iCs"));
+    if (config.tableContinuation.bold) {
+      rPr.appendChild(wElem(doc, "b"));
+      rPr.appendChild(wElem(doc, "bCs"));
+    }
+    if (config.tableContinuation.italic) {
+      rPr.appendChild(wElem(doc, "i"));
+      rPr.appendChild(wElem(doc, "iCs"));
+    }
+    const szVal = String(ptsToHalfPts(config.tableContinuation.fontSize));
     const sz = wElem(doc, "sz");
-    setWAttr(sz, "val", "26");
+    setWAttr(sz, "val", szVal);
     rPr.appendChild(sz);
     const sc = wElem(doc, "szCs");
-    setWAttr(sc, "val", "26");
+    setWAttr(sc, "val", szVal);
     rPr.appendChild(sc);
     return rPr;
   };
@@ -762,7 +790,7 @@ const A_NS_DRAW = "http://schemas.openxmlformats.org/drawingml/2006/main";
 const WPS_NS_DRAW =
   "http://schemas.microsoft.com/office/word/2010/wordprocessingShape";
 
-function applyChapterLabel(p: Element, rules: Rules) {
+function applyChapterLabel(p: Element, rules: Rules, config: FormattingConfig) {
   // First collect the chapter label text before stripping anything
   const rawText = getParagraphText(p);
   const m = normalizeText(rawText).match(/^chapter\s+([ivxlcdm]+|\d+)$/iu);
@@ -818,15 +846,32 @@ function applyChapterLabel(p: Element, rules: Rules) {
     }
   }
 
-  writePAlignment(p, "center");
-  writePIndent(p, 0);
-  if (rules.spacing) writePSpacing(p, 0, 0, 480);
-  writePageBreakBefore(p, true);
-  writeRuns(p, "Garamond", 28, true, false);
-  writePPrRPr(p, "Garamond", 28, true, false);
+  writePAlignment(p, config.chapterNumber.alignment);
+  writePIndent(p, inchesToTwips(config.chapterNumber.indentation));
+
+  if (rules.spacing)
+    writePSpacing(p, 0, 0, linesToTwips(config.chapterNumber.lineSpacing));
+
+  if (rules.pagination) writePageBreakBefore(p, true);
+
+  const size = ptsToHalfPts(config.chapterNumber.fontSize);
+  writeRuns(
+    p,
+    config.chapterNumber.fontFamily,
+    size,
+    config.chapterNumber.bold ?? null,
+    config.chapterNumber.italic ?? null,
+  );
+  writePPrRPr(
+    p,
+    config.chapterNumber.fontFamily,
+    size,
+    config.chapterNumber.bold ?? false,
+    config.chapterNumber.italic ?? false,
+  );
 }
 
-function applyChapterTitle(p: Element, rules: Rules) {
+function applyChapterTitle(p: Element, rules: Rules, config: FormattingConfig) {
   stripAll(p);
   stripOrphanedBookmarks(p);
   stripLeadingTabRuns(p);
@@ -834,76 +879,142 @@ function applyChapterTitle(p: Element, rules: Rules) {
   stripLeadingTextWhitespace(p);
   stripTrailingTextWhitespace(p);
   uppercaseParagraphText(p);
-  writePAlignment(p, "center");
-  writePIndent(p, 0);
-  if (rules.spacing) writePSpacing(p, 0, 0, 720);
-  writeRuns(p, "Garamond", 28, true, false);
-  writePPrRPr(p, "Garamond", 28, true, false);
+
+  writePAlignment(p, config.titles.alignment);
+  writePIndent(p, inchesToTwips(config.titles.indentation));
+
+  if (rules.spacing)
+    writePSpacing(p, 0, 0, linesToTwips(config.titles.lineSpacing));
+
+  const size = ptsToHalfPts(config.titles.fontSize);
+  writeRuns(
+    p,
+    config.titles.fontFamily,
+    size,
+    config.titles.bold ?? null,
+    config.titles.italic ?? null,
+  );
+  writePPrRPr(
+    p,
+    config.titles.fontFamily,
+    size,
+    config.titles.bold ?? false,
+    config.titles.italic ?? false,
+  );
 }
 
-function applyReferencesTitle(p: Element, rules: Rules) {
+function applyReferencesTitle(p: Element, rules: Rules, config: FormattingConfig) {
   stripAll(p);
   stripLeadingTabRuns(p);
   stripLeadingArrowRuns(p);
   stripLeadingTextWhitespace(p);
   stripTrailingTextWhitespace(p);
   uppercaseParagraphText(p);
-  writePAlignment(p, "center");
-  writePIndent(p, 0);
-  if (rules.spacing) writePSpacing(p, 0, 0, 720);
-  writeRuns(p, "Garamond", 28, true, false);
-  writePPrRPr(p, "Garamond", 28, true, false);
+
+  writePAlignment(p, config.titles.alignment);
+  writePIndent(p, inchesToTwips(config.titles.indentation));
+
+  if (rules.spacing)
+    writePSpacing(p, 0, 0, linesToTwips(config.titles.lineSpacing));
+
+  const size = ptsToHalfPts(config.titles.fontSize);
+  writeRuns(
+    p,
+    config.titles.fontFamily,
+    size,
+    config.titles.bold ?? null,
+    config.titles.italic ?? null,
+  );
+  writePPrRPr(
+    p,
+    config.titles.fontFamily,
+    size,
+    config.titles.bold ?? false,
+    config.titles.italic ?? false,
+  );
 }
 
-function applyHeading(p: Element, rules: Rules) {
+function applyHeading(p: Element, rules: Rules, config: FormattingConfig) {
   stripAll(p);
   stripLeadingTabRuns(p);
   stripLeadingArrowRuns(p);
   stripLeadingTextWhitespace(p);
   stripTrailingTextWhitespace(p);
-  if (rules.alignment) writePAlignment(p, "left");
-  if (rules.indentation) writePIndent(p, 0);
-  if (rules.spacing) writePSpacing(p, 0, 0, 480);
-  writeRuns(p, "Garamond", 26, true, false);
-  writePPrRPr(p, "Garamond", 26, true, false);
+
+  if (rules.alignment) writePAlignment(p, config.headings.alignment);
+  if (rules.indentation)
+    writePIndent(p, inchesToTwips(config.headings.indentation));
+  if (rules.spacing)
+    writePSpacing(p, 0, 0, linesToTwips(config.headings.lineSpacing));
+
+  const size = ptsToHalfPts(config.headings.fontSize);
+  writeRuns(
+    p,
+    config.headings.fontFamily,
+    size,
+    config.headings.bold ?? null,
+    config.headings.italic ?? null,
+  );
+  writePPrRPr(
+    p,
+    config.headings.fontFamily,
+    size,
+    config.headings.bold ?? false,
+    config.headings.italic ?? false,
+  );
 }
 
-function applyItalicHeading(p: Element, rules: Rules) {
+function applyItalicHeading(p: Element, rules: Rules, config: FormattingConfig) {
   stripAll(p);
   stripLeadingTabRuns(p);
   stripLeadingArrowRuns(p);
   stripLeadingTextWhitespace(p);
   stripTrailingTextWhitespace(p);
-  if (rules.alignment) writePAlignment(p, "left");
-  if (rules.spacing) writePSpacing(p, 0, 0, 480);
+
+  if (rules.alignment) writePAlignment(p, config.headings.alignment);
+  if (rules.spacing)
+    writePSpacing(p, 0, 0, linesToTwips(config.headings.lineSpacing));
+
   const pPr = ensurePPr(p);
   removeChildren(pPr, "ind");
   const ind = wElem(p.ownerDocument!, "ind");
   setWAttr(ind, "firstLine", "0");
   setWAttr(ind, "hanging", "0");
-  setWAttr(ind, "left", "0");
+  setWAttr(ind, "left", String(inchesToTwips(config.headings.indentation)));
   setWAttr(ind, "right", "0");
   pPr.appendChild(ind);
-  writeRuns(p, "Garamond", 24, true, true);
-  writePPrRPr(p, "Garamond", 24, true, true);
+
+  const size = ptsToHalfPts(config.headings.fontSize - 1);
+  writeRuns(p, config.headings.fontFamily, size, true, true);
+  writePPrRPr(p, config.headings.fontFamily, size, true, true);
 }
 
-function applyBodyParagraph(p: Element, rules: Rules, beforeSpacing = 0) {
+function applyBodyParagraph(
+  p: Element,
+  rules: Rules,
+  config: FormattingConfig,
+  beforeSpacing = 0,
+) {
   stripAll(p);
   stripLeadingTabRuns(p);
   stripLeadingArrowRuns(p);
   stripLeadingTextWhitespace(p);
   stripTrailingTextWhitespace(p);
-  if (rules.alignment) writePAlignment(p, "both");
-  writePIndent(p, 720);
-  writePSpacing(p, beforeSpacing, 0, 480);
+
+  if (rules.alignment) writePAlignment(p, config.body.alignment);
+  writePIndent(p, inchesToTwips(config.body.indentation));
+
+  if (rules.spacing)
+    writePSpacing(p, beforeSpacing, 0, linesToTwips(config.body.lineSpacing));
+
   removePBdr(p);
   // APA: never italicise body text (pass false, not null)
-  writeRuns(p, "Garamond", 24, null, false);
-  writePPrRPr(p, "Garamond", 24, false, false);
+  const size = ptsToHalfPts(config.body.fontSize);
+  writeRuns(p, config.body.fontFamily, size, null, false);
+  writePPrRPr(p, config.body.fontFamily, size, false, false);
 }
 
-function applyReferenceEntry(p: Element, rules: Rules) {
+function applyReferenceEntry(p: Element, rules: Rules, config: FormattingConfig) {
   stripAll(p);
   stripLeadingTabRuns(p);
   stripLeadingArrowRuns(p);
@@ -934,14 +1045,19 @@ function applyReferenceEntry(p: Element, rules: Rules) {
     break;
   }
 
-  if (rules.alignment) writePAlignment(p, "both");
-  // APA hanging indent: first line flush left, all subsequent lines indented (720 twips = 1.27 cm ≈ 5 spaces)
-  if (rules.indentation) writePHangingIndent(p, 720, 720);
-  else writePIndent(p, 0);
-  writePSpacing(p, 0, 0, 240); // single spacing
-  // Garamond 11 pt, no bold, no italic
-  writeRuns(p, "Garamond", 22, false, false);
-  writePPrRPr(p, "Garamond", 22, false, false);
+  if (rules.alignment) writePAlignment(p, config.references.alignment);
+  // APA hanging indent: first line flush left, all subsequent lines indented
+  if (rules.indentation) {
+    const twips = inchesToTwips(config.references.indentation);
+    writePHangingIndent(p, twips, twips);
+  } else writePIndent(p, 0);
+
+  if (rules.spacing)
+    writePSpacing(p, 0, 0, linesToTwips(config.references.lineSpacing));
+
+  const size = ptsToHalfPts(config.references.fontSize);
+  writeRuns(p, config.references.fontFamily, size, false, false);
+  writePPrRPr(p, config.references.fontFamily, size, false, false);
 }
 
 // ─── List paragraph formatter ────────────────────────────────────────────────
@@ -962,7 +1078,7 @@ function getNumIlvl(p: Element): number {
   return parseInt(wAttr(ilvlEl, "val") || "0", 10);
 }
 
-function applyListParagraph(p: Element, rules: Rules) {
+function applyListParagraph(p: Element, rules: Rules, config: FormattingConfig) {
   // Read indent level BEFORE any stripping
   const ilvl = getNumIlvl(p);
 
@@ -989,23 +1105,20 @@ function applyListParagraph(p: Element, rules: Rules) {
   stripLeadingTextWhitespace(p);
   stripTrailingTextWhitespace(p);
 
-  if (rules.alignment) writePAlignment(p, "both");
-  writePSpacing(p, 0, 0, 480);
+  if (rules.alignment) writePAlignment(p, config.body.alignment);
+  if (rules.spacing)
+    writePSpacing(p, 0, 0, linesToTwips(config.body.lineSpacing));
 
   // Write explicit ind to override whatever the numbering definition says.
-  // CRITICAL: ind must be inserted AFTER numPr in the pPr child order.
-  // Word resolves indentation by taking the last ind it sees; if ind appears
-  // before numPr the numbering definition wins and our values are ignored.
-  //   ilvl=0 → left=363 (0.64cm), hanging=363
-  //   ilvl=1 → left=720 (1.27cm), firstLine=0
   const pPrEl = ensurePPr(p);
   removeChildren(pPrEl, "ind");
   const ind = wElem(p.ownerDocument!, "ind");
   if (ilvl === 0) {
-    setWAttr(ind, "left", "363");
-    setWAttr(ind, "hanging", "363");
+    const v = String(inchesToTwips(config.body.indentation / 2));
+    setWAttr(ind, "left", v);
+    setWAttr(ind, "hanging", v);
   } else {
-    setWAttr(ind, "left", "720");
+    setWAttr(ind, "left", String(inchesToTwips(config.body.indentation)));
     setWAttr(ind, "firstLine", "0");
   }
   setWAttr(ind, "right", "0");
@@ -1017,58 +1130,76 @@ function applyListParagraph(p: Element, rules: Rules) {
     pPrEl.appendChild(ind);
   }
 
-  writeRuns(p, "Garamond", 24, false, false);
-  writePPrRPr(p, "Garamond", 24, false, false);
+  const size = ptsToHalfPts(config.body.fontSize);
+  writeRuns(p, config.body.fontFamily, size, false, false);
+  writePPrRPr(p, config.body.fontFamily, size, false, false);
 }
 
-function applyFigureCaption(p: Element, rules: Rules) {
+function applyFigureCaption(p: Element, rules: Rules, config: FormattingConfig) {
   stripAll(p);
   stripLeadingTabRuns(p);
   stripLeadingArrowRuns(p);
   stripLeadingTextWhitespace(p);
   stripTrailingTextWhitespace(p);
-  writePAlignment(p, "center");
-  writePIndent(p, 0);
-  writePSpacing(p, 0, 0, 480);
+  if (rules.alignment) writePAlignment(p, config.figureCaption.alignment);
+  if (rules.indentation)
+    writePIndent(p, inchesToTwips(config.figureCaption.indentation));
+
+  if (rules.spacing)
+    writePSpacing(p, 0, 0, linesToTwips(config.figureCaption.lineSpacing));
   removePBdr(p);
   ensureTrailingPeriod(p);
-  writeRuns(p, "Garamond", 24, false, false);
-  writePPrRPr(p, "Garamond", 24, false, false);
+  const size = ptsToHalfPts(config.figureCaption.fontSize);
+  writeRuns(p, config.figureCaption.fontFamily, size, false, false);
+  writePPrRPr(p, config.figureCaption.fontFamily, size, false, false);
 }
 
-function applyTableCaption(p: Element, rules: Rules) {
+function applyTableCaption(p: Element, rules: Rules, config: FormattingConfig) {
   stripAll(p);
   stripLeadingTabRuns(p);
   stripLeadingArrowRuns(p);
   stripLeadingTextWhitespace(p);
   stripTrailingTextWhitespace(p);
-  writePAlignment(p, "left");
-  writePIndent(p, 0);
-  writePSpacing(p, 0, 0, 240);
+  if (rules.alignment) writePAlignment(p, config.tableCaption.alignment);
+  if (rules.indentation)
+    writePIndent(p, inchesToTwips(config.tableCaption.indentation));
+  if (rules.spacing)
+    writePSpacing(p, 0, 0, linesToTwips(config.tableCaption.lineSpacing));
   removePBdr(p);
   ensureTrailingPeriod(p);
-  writeRuns(p, "Garamond", 24, false, false);
-  writePPrRPr(p, "Garamond", 24, false, false);
+  const size = ptsToHalfPts(config.tableCaption.fontSize);
+  writeRuns(p, config.tableCaption.fontFamily, size, false, false);
+  writePPrRPr(p, config.tableCaption.fontFamily, size, false, false);
 }
 
-function applyLegend(p: Element, rules: Rules) {
+function applyLegend(p: Element, rules: Rules, config: FormattingConfig) {
   stripAll(p);
   stripLeadingTabRuns(p);
   stripLeadingArrowRuns(p);
   stripLeadingTextWhitespace(p);
   stripTrailingTextWhitespace(p);
-  if (rules.alignment) writePAlignment(p, "left");
-  if (rules.indentation) writePIndent(p, 0);
-  if (rules.spacing) writePSpacing(p, 0, 0, 240);
-  writeRuns(p, "Garamond", 22, false, false);
-  writePPrRPr(p, "Garamond", 22, false, false);
+  if (rules.alignment) writePAlignment(p, config.tableCaption.alignment);
+  if (rules.indentation)
+    writePIndent(p, inchesToTwips(config.tableCaption.indentation));
+  if (rules.spacing)
+    writePSpacing(p, 0, 0, linesToTwips(config.tableCaption.lineSpacing));
+  const size = ptsToHalfPts(config.tableCaption.fontSize - 1);
+  writeRuns(p, config.tableCaption.fontFamily, size, false, false);
+  writePPrRPr(p, config.tableCaption.fontFamily, size, false, false);
 }
 
-function applyContinuationLabel(p: Element, rules: Rules, tableNumber: string) {
+function applyContinuationLabel(
+  p: Element,
+  rules: Rules,
+  config: FormattingConfig,
+  tableNumber: string,
+) {
   stripAll(p);
-  if (rules.alignment) writePAlignment(p, "left");
-  if (rules.indentation) writePIndent(p, 0);
-  if (rules.spacing) writePSpacing(p, 0, 0, 240);
+  if (rules.alignment) writePAlignment(p, config.tableContinuation.alignment);
+  if (rules.indentation)
+    writePIndent(p, inchesToTwips(config.tableContinuation.indentation));
+  if (rules.spacing)
+    writePSpacing(p, 0, 0, linesToTwips(config.tableContinuation.lineSpacing));
 
   Array.from(p.querySelectorAll("br")).forEach((br) => {
     if (br.namespaceURI === W_NS && wAttr(br, "type") === "page") {
@@ -1089,11 +1220,24 @@ function applyContinuationLabel(p: Element, rules: Rules, tableNumber: string) {
     p.appendChild(run);
   }
 
-  writeRuns(p, "Garamond", 26, false, true);
-  writePPrRPr(p, "Garamond", 26, false, true);
+  const size = ptsToHalfPts(config.tableContinuation.fontSize);
+  writeRuns(
+    p,
+    config.tableContinuation.fontFamily,
+    size,
+    config.tableContinuation.bold ?? null,
+    config.tableContinuation.italic ?? null,
+  );
+  writePPrRPr(
+    p,
+    config.tableContinuation.fontFamily,
+    size,
+    config.tableContinuation.bold ?? false,
+    config.tableContinuation.italic ?? false,
+  );
 }
 
-function applyFigureParagraph(p: Element, rules?: Rules) {
+function applyFigureParagraph(p: Element, config: FormattingConfig, rules?: Rules) {
   const pPr = ensurePPr(p);
   for (const tag of [
     "pStyle",
@@ -1117,7 +1261,7 @@ function applyFigureParagraph(p: Element, rules?: Rules) {
   const sp = wElem(p.ownerDocument!, "spacing");
   setWAttr(sp, "before", "0");
   setWAttr(sp, "after", "0");
-  setWAttr(sp, "line", "240");
+  setWAttr(sp, "line", String(linesToTwips(config.figure.spacing)));
   setWAttr(sp, "lineRule", "auto");
   setWAttr(sp, "beforeAutospacing", "0");
   setWAttr(sp, "afterAutospacing", "0");
@@ -1126,13 +1270,14 @@ function applyFigureParagraph(p: Element, rules?: Rules) {
   const rPr = wElem(p.ownerDocument!, "rPr");
   const rFonts = wElem(p.ownerDocument!, "rFonts");
   for (const a of ["ascii", "hAnsi", "eastAsia", "cs"])
-    setWAttr(rFonts, a, "Garamond");
+    setWAttr(rFonts, a, config.body.fontFamily);
   rPr.appendChild(rFonts);
+  const szVal = String(ptsToHalfPts(config.body.fontSize));
   const szEl = wElem(p.ownerDocument!, "sz");
-  setWAttr(szEl, "val", "24");
+  setWAttr(szEl, "val", szVal);
   rPr.appendChild(szEl);
   const szCs = wElem(p.ownerDocument!, "szCs");
-  setWAttr(szCs, "val", "24");
+  setWAttr(szCs, "val", szVal);
   rPr.appendChild(szCs);
   pPr.appendChild(rPr);
 
@@ -1247,7 +1392,7 @@ function applyFigureParagraph(p: Element, rules?: Rules) {
   if (!rules || rules.borders) {
     const makeLn = (doc: Document): Element => {
       const ln = doc.createElementNS(A_NS, "a:ln");
-      ln.setAttribute("w", "38100");
+      ln.setAttribute("w", String(ptsToEMU(config.figure.borderWeight)));
       const solidFill = doc.createElementNS(A_NS, "a:solidFill");
       const srgbClr = doc.createElementNS(A_NS, "a:srgbClr");
       srgbClr.setAttribute("val", "000000");
@@ -1303,7 +1448,7 @@ function applyFigureParagraph(p: Element, rules?: Rules) {
       for (const side of ["top", "left", "bottom", "right"]) {
         const edge = wElem(p.ownerDocument!, side);
         setWAttr(edge, "val", "single");
-        setWAttr(edge, "sz", "24");
+        setWAttr(edge, "sz", String(Math.round(config.figure.borderWeight * 8)));
         setWAttr(edge, "space", "4");
         setWAttr(edge, "color", "000000");
         pBdr.appendChild(edge);
@@ -1655,7 +1800,7 @@ function isItalicHeading(p: Element, text: string): boolean {
 
 // ─── table processor ─────────────────────────────────────────────────────────
 
-function processTable(tbl: Element, rules: Rules, state: State) {
+function processTable(tbl: Element, rules: Rules, config: FormattingConfig, state: State) {
   const zone = state.zone;
   if (zone !== "chapters" && zone !== "references") return;
 
@@ -1716,11 +1861,12 @@ function processTable(tbl: Element, rules: Rules, state: State) {
     Array.from(tc.querySelectorAll("p")).forEach((p) => {
       if (p.namespaceURI !== W_NS) return;
       const isNumbered = p.querySelectorAll("pPr > numPr").length > 0;
-      if (rules.alignment) writePAlignment(p, isNumbered ? "both" : "center");
-      if (rules.spacing) writePSpacing(p, 0, 0, 240);
+      if (rules.alignment) writePAlignment(p, isNumbered ? "both" : config.table.alignment);
+      if (rules.spacing) writePSpacing(p, 0, 0, linesToTwips(config.table.lineSpacing));
       if (rules.indentation) writePIndent(p, 0);
-      writeRuns(p, "Arial", 20, false, false);
-      writePPrRPr(p, "Arial", 20, false, false);
+      const size = ptsToHalfPts(config.table.fontSize);
+      writeRuns(p, config.table.fontFamily, size, false, false);
+      writePPrRPr(p, config.table.fontFamily, size, false, false);
     });
   });
 }
@@ -1736,7 +1882,7 @@ interface State {
   lastTableNumber: string;
 }
 
-function processParagraph(p: Element, rules: Rules, state: State) {
+function processParagraph(p: Element, rules: Rules, config: FormattingConfig, state: State) {
   const text = getParagraphText(p);
   const normalized = normalizeText(text);
   const styleId = getParagraphStyleId(p);
@@ -1766,12 +1912,12 @@ function processParagraph(p: Element, rules: Rules, state: State) {
   if (hasDrawing && normalized === "" && !isInTable(p)) {
     state.afterTable = false;
     state.isFirstParagraph = false;
-    applyFigureParagraph(p, rules);
+    applyFigureParagraph(p, config, rules);
     return;
   }
 
   if (normalized === "") {
-    if (state.zone === "references") applyReferenceEmptyLine(p);
+    if (state.zone === "references") applyReferenceEmptyLine(p, config);
     else applyEmptyParagraph(p);
     return;
   }
@@ -1801,13 +1947,13 @@ function processParagraph(p: Element, rules: Rules, state: State) {
 
   // APA: all headings use the same non-italic style regardless of chapter
   const applyCorrectHeading = () => {
-    applyHeading(p, rules);
+    applyHeading(p, rules, config);
   };
 
   if (styleId === "Heading1") {
     if (isChapterLabel) {
       state.afterTable = false;
-      applyChapterLabel(p, rules);
+      applyChapterLabel(p, rules, config);
       return;
     }
     if (
@@ -1822,7 +1968,7 @@ function processParagraph(p: Element, rules: Rules, state: State) {
       state.expectChapterTitle = false;
       state.isFirstParagraph = true;
       state.afterTable = false;
-      applyChapterTitle(p, rules);
+      applyChapterTitle(p, rules, config);
       return;
     }
     if (isReferences) {
@@ -1833,7 +1979,7 @@ function processParagraph(p: Element, rules: Rules, state: State) {
           p,
         );
       }
-      applyReferencesTitle(p, rules);
+      applyReferencesTitle(p, rules, config);
       return;
     }
     state.afterTable = false;
@@ -1843,7 +1989,7 @@ function processParagraph(p: Element, rules: Rules, state: State) {
 
   if (isChapterLabel) {
     state.afterTable = false;
-    applyChapterLabel(p, rules);
+    applyChapterLabel(p, rules, config);
     return;
   }
   if (isReferences) {
@@ -1854,7 +2000,7 @@ function processParagraph(p: Element, rules: Rules, state: State) {
         p,
       );
     }
-    applyReferencesTitle(p, rules);
+    applyReferencesTitle(p, rules, config);
     return;
   }
   if (
@@ -1869,7 +2015,7 @@ function processParagraph(p: Element, rules: Rules, state: State) {
     state.expectChapterTitle = false;
     state.isFirstParagraph = true;
     state.afterTable = false;
-    applyChapterTitle(p, rules);
+    applyChapterTitle(p, rules, config);
     return;
   }
 
@@ -1898,35 +2044,35 @@ function processParagraph(p: Element, rules: Rules, state: State) {
           newP.appendChild(r);
         });
         p.parentElement.insertBefore(newP, p.nextSibling);
-        applyFigureCaption(newP, rules);
+        applyFigureCaption(newP, rules, config);
       }
     }
-    applyFigureParagraph(p, rules);
+    applyFigureParagraph(p, config, rules);
     return;
   }
   if (isFigureCaption) {
-    applyFigureCaption(p, rules);
+    applyFigureCaption(p, rules, config);
     return;
   }
   if (isTableCaption) {
     const m = normalized.match(/^table\s+([\d]+[\-\.][\d]+)\b/iu);
     if (m) state.lastTableNumber = m[1];
-    applyTableCaption(p, rules);
+    applyTableCaption(p, rules, config);
     return;
   }
   if (isContinuation) {
-    applyContinuationLabel(p, rules, state.lastTableNumber);
+    applyContinuationLabel(p, rules, config, state.lastTableNumber);
     return;
   }
   if (isLegend) {
-    applyLegend(p, rules);
+    applyLegend(p, rules, config);
     return;
   }
   if (inTable) return;
 
   if (state.zone === "references") {
     state.afterTable = false;
-    applyReferenceEntry(p, rules);
+    applyReferenceEntry(p, rules, config);
     return;
   }
 
@@ -1957,9 +2103,11 @@ function processParagraph(p: Element, rules: Rules, state: State) {
     stripTrailingTextWhitespace(p);
     if (rules.alignment) writePAlignment(p, "both");
     writePHangingIndent(p, 1440, 720);
-    writePSpacing(p, 0, 0, 480);
-    writeRuns(p, "Garamond", 24, false, false);
-    writePPrRPr(p, "Garamond", 24, false, false);
+    if (rules.spacing)
+      writePSpacing(p, 0, 0, linesToTwips(config.body.lineSpacing));
+    const size = ptsToHalfPts(config.body.fontSize);
+    writeRuns(p, config.body.fontFamily, size, false, false);
+    writePPrRPr(p, config.body.fontFamily, size, false, false);
     state.afterTable = false;
     return;
   }
@@ -2080,7 +2228,7 @@ function processParagraph(p: Element, rules: Rules, state: State) {
       }
     }
     state.afterTable = false;
-    applyListParagraph(p, rules);
+    applyListParagraph(p, rules, config);
     return;
   }
   if (isHeadingStyleId(styleId)) {
@@ -2100,9 +2248,9 @@ function processParagraph(p: Element, rules: Rules, state: State) {
     return;
   }
 
-  const beforeSpacing = state.afterTable ? 240 : 0;
+  const beforeSpacing = state.afterTable ? linesToTwips(config.table.lineSpacing) : 0;
   state.afterTable = false;
-  applyBodyParagraph(p, rules, beforeSpacing);
+  applyBodyParagraph(p, rules, config, beforeSpacing);
 }
 
 // ─── hoist table captions pre-pass ──────────────────────────────────────────
@@ -2145,7 +2293,7 @@ function hoistTableCaptions(body: Element, children: Element[]) {
 
 // ─── table continuation pre-pass ─────────────────────────────────────────────
 
-function handleTableContinuation(body: Element, children: Element[]) {
+function handleTableContinuation(body: Element, children: Element[], config: FormattingConfig) {
   children.forEach((child) => {
     if (child.localName !== "tbl") return;
     Array.from(child.querySelectorAll("tblHeader")).forEach((th) => {
@@ -2261,7 +2409,10 @@ function handleTableContinuation(body: Element, children: Element[]) {
         : "Continuation of Table...";
 
     body.insertBefore(buildZeroHeightPageBreakP(body.ownerDocument!), nextTbl);
-    body.insertBefore(buildContinuationP(body.ownerDocument!, label), nextTbl);
+    body.insertBefore(
+      buildContinuationP(body.ownerDocument!, label, config),
+      nextTbl,
+    );
   }
 }
 
@@ -2331,7 +2482,7 @@ export async function formatDocxApa(
   hoistTableCaptions(body, scopedChildren);
 
   if (rules.continuation) {
-    handleTableContinuation(body, scopedChildren);
+    handleTableContinuation(body, scopedChildren, options.config);
   }
 
   const state: State = {
@@ -2347,9 +2498,9 @@ export async function formatDocxApa(
     if (!(child instanceof Element)) continue;
     if (child.parentElement !== body) continue;
     if (child.localName === "p") {
-      processParagraph(child, rules, state);
+      processParagraph(child, rules, options.config, state);
     } else if (child.localName === "tbl") {
-      processTable(child, rules, state);
+      processTable(child, rules, options.config, state);
       state.afterTable = true;
     }
   }

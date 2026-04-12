@@ -3,13 +3,15 @@ import { formatDocx } from "./lib/FormatterEngine";
 import { formatDocxApa } from "./lib/ApaFormatterEngine";
 import { formatPreliminary } from "./lib/PreliminaryEngine";
 import { formatAppendices } from "./lib/AppendicesEngine";
-import { RULES_DEF } from "./constants";
-import type { ToastMsg, CitationStyle } from "./constants";
+import { RULES_DEF, DEFAULT_CONFIG_IEEE, DEFAULT_CONFIG_APA } from "./constants";
+import type { ToastMsg, CitationStyle, FormattingConfig } from "./constants";
 import Sidebar from "./components/Sidebar";
+import FormattingConfigPanel from "./components/FormattingConfigPanel";
 import UploadZone from "./components/UploadZone";
 import StatusPanel from "./components/StatusPanel";
 import MobileSheet from "./components/MobileSheet";
 import PreviewModal from "./components/PreviewModal";
+import MobileStylesSheet from "./components/MobileStylesSheet";
 import Toast from "./components/Toast";
 
 // PWA install prompt is handled entirely by InstallPrompt.tsx
@@ -54,7 +56,13 @@ export default function App() {
 
   const toggleTheme = useCallback(() => setIsDark((d) => !d), []);
 
-  // ── sections ─────────────────────────────────────────────────────────────
+  // ── responsive ─────────────────────────────────────────────────────────────
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 640);
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
   const [selectedSections, setSelectedSections] = useState<string[]>([
     "preliminary",
     "chapters",
@@ -82,10 +90,67 @@ export default function App() {
     );
   }, []);
 
+  // ── components state ───────────────────────────────────────────────────
+  const [citationStyle, setCitationStyle] = useState<CitationStyle>("ieee");
+
+  // ── formatting config ────────────────────────────────────────────────────
+  const [configIeee, setConfigIeee] = useState<FormattingConfig>(() => {
+    const saved = localStorage.getItem("thesis_formatting_config_ieee");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        return DEFAULT_CONFIG_IEEE;
+      }
+    }
+    return DEFAULT_CONFIG_IEEE;
+  });
+
+  const [configApa, setConfigApa] = useState<FormattingConfig>(() => {
+    const saved = localStorage.getItem("thesis_formatting_config_apa");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        return DEFAULT_CONFIG_APA;
+      }
+    }
+    return DEFAULT_CONFIG_APA;
+  });
+
+  useEffect(() => {
+    localStorage.setItem("thesis_formatting_config_ieee", JSON.stringify(configIeee));
+  }, [configIeee]);
+
+  useEffect(() => {
+    localStorage.setItem("thesis_formatting_config_apa", JSON.stringify(configApa));
+  }, [configApa]);
+
+  const formattingConfig = citationStyle === "apa" ? configApa : configIeee;
+  const setFormattingConfig = (newConfig: FormattingConfig) => {
+    if (citationStyle === "apa") setConfigApa(newConfig);
+    else setConfigIeee(newConfig);
+  };
+
+  const handleResetStyles = () => {
+    const prev = citationStyle === "apa" ? configApa : configIeee;
+    const defaults = citationStyle === "apa" ? DEFAULT_CONFIG_APA : DEFAULT_CONFIG_IEEE;
+    
+    // Save snapshot for undo
+    const snapshot = { ...prev };
+    
+    setFormattingConfig(defaults);
+    
+    showToast("Styles restored to defaults.", "success", "Undo", () => {
+      setFormattingConfig(snapshot);
+      showToast("Restoration undone.");
+    });
+  };
+
   // ── file ─────────────────────────────────────────────────────────────────
   const [file, setFile] = useState<File | null>(null);
   const [rulesOpen, setRulesOpen] = useState(true);
-  const [citationStyle, setCitationStyle] = useState<CitationStyle>("ieee");
+  const [stylesModalOpen, setStylesModalOpen] = useState(false);
 
   // ── modals ───────────────────────────────────────────────────────────────
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
@@ -112,9 +177,9 @@ export default function App() {
   const [toast, setToast] = useState<ToastMsg | null>(null);
 
   const showToast = useCallback(
-    (msg: string, type: "success" | "error" = "success") => {
-      setToast({ id: Date.now(), msg, type });
-      setTimeout(() => setToast(null), 4700);
+    (msg: string, type: "success" | "error" = "success", actionLabel?: string, onAction?: () => void) => {
+      setToast({ id: Date.now(), msg, type, actionLabel, onAction });
+      setTimeout(() => setToast(null), 5000);
     },
     [],
   );
@@ -131,7 +196,10 @@ export default function App() {
       let blob: Blob | null = null;
 
       if (runPreliminary) {
-        blob = await formatPreliminary(currentBuffer, { rules: enabledRules });
+        blob = await formatPreliminary(currentBuffer, {
+          rules: enabledRules,
+          config: formattingConfig,
+        });
         currentBuffer = await blob.arrayBuffer();
       }
       if (runChapters) {
@@ -139,18 +207,23 @@ export default function App() {
           blob = await formatDocxApa(currentBuffer, {
             sections: selectedSections,
             rules: enabledRules,
+            config: formattingConfig,
           });
         } else {
           blob = await formatDocx(currentBuffer, {
             sections: selectedSections,
             rules: enabledRules,
             citationStyle,
+            config: formattingConfig,
           });
         }
         currentBuffer = await blob.arrayBuffer();
       }
       if (runAppendices) {
-        blob = await formatAppendices(currentBuffer, { rules: enabledRules });
+        blob = await formatAppendices(currentBuffer, {
+          rules: enabledRules,
+          config: formattingConfig,
+        });
       }
 
       const docxMime =
@@ -179,6 +252,7 @@ export default function App() {
     enabledRules,
     citationStyle,
     showToast,
+    formattingConfig,
   ]);
 
   const sectionLabels: Record<string, string> = {
@@ -321,7 +395,7 @@ export default function App() {
                   </p>
                 </div>
                 <div
-                  className="flex shrink-0 gap-2"
+                  className="flex flex-wrap shrink-0 gap-2"
                   style={{ position: "relative", zIndex: 10 }}
                 >
                   <div className="relative" ref={templateDropdownRef}>
@@ -430,6 +504,17 @@ export default function App() {
                       </div>
                     )}
                   </div>
+                  <button
+                    onClick={() => setStylesModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 rounded-2xl border px-4 py-2.5 text-xs font-semibold transition hover:opacity-80"
+                    style={{
+                      borderColor: "var(--border)",
+                      color: "var(--accent)",
+                      background: "var(--accent-subtle)",
+                    }}
+                  >
+                    <i className="fa-solid fa-wand-magic-sparkles text-xs" /> Formatting Styles
+                  </button>
                   <button
                     onClick={() => setPreviewOpen(true)}
                     className="inline-flex items-center gap-1.5 rounded-2xl border px-4 py-2.5 text-xs font-semibold transition hover:opacity-80"
@@ -582,13 +667,13 @@ export default function App() {
                         style={
                           active
                             ? {
-                                background: "var(--accent-subtle)",
-                                borderColor: "var(--accent)",
-                              }
+                              background: "var(--accent-subtle)",
+                              borderColor: "var(--accent)",
+                            }
                             : {
-                                background: "var(--surface-raised)",
-                                borderColor: "var(--border)",
-                              }
+                              background: "var(--surface-raised)",
+                              borderColor: "var(--border)",
+                            }
                         }
                       >
                         <h3
@@ -672,15 +757,114 @@ export default function App() {
         sectionIcons={sectionIcons}
         citationStyle={citationStyle}
         setCitationStyle={setCitationStyle}
+        onOpenStyles={() => setStylesModalOpen(true)}
+        onOpenPreview={() => setPreviewOpen(true)}
       />
-
       <PreviewModal open={previewOpen} onClose={() => setPreviewOpen(false)} />
+
+      {/* Styles Modal - Desktop */}
+      {!isMobile && stylesModalOpen && (
+        <div
+          className="sheet-backdrop open"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setStylesModalOpen(false);
+          }}
+          style={{ backdropFilter: "blur(4px)" }}
+        >
+          <div
+            className="sheet-modal w-full max-w-2xl max-h-[90vh]"
+            style={{ background: "var(--surface)", borderColor: "var(--border)" }}
+          >
+            <div
+              className="flex items-center justify-between border-b px-6 py-4"
+              style={{ borderColor: "var(--border)" }}
+            >
+              <div className="flex items-center gap-3">
+                <span
+                  className="flex h-10 w-10 items-center justify-center rounded-2xl"
+                  style={{
+                    background: "var(--accent-subtle)",
+                    color: "var(--accent)",
+                  }}
+                >
+                  <i className="fa-solid fa-wand-magic-sparkles text-lg" />
+                </span>
+                <div>
+                  <h2
+                    className="text-xl font-bold"
+                    style={{ color: "var(--text-primary)" }}
+                  >
+                    Formatting Styles
+                  </h2>
+                  <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--accent)" }}>
+                    Style: {citationStyle === "apa" ? "APA 7th Edition" : "IEEE"}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setStylesModalOpen(false)}
+                className="flex h-10 w-10 items-center justify-center rounded-xl transition hover:bg-black/5"
+                style={{ color: "var(--text-soft)" }}
+              >
+                <i className="fa-solid fa-xmark text-lg" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+              <FormattingConfigPanel
+                config={formattingConfig}
+                onChange={setFormattingConfig}
+                citationStyle={citationStyle}
+              />
+            </div>
+
+            <div
+              className="px-6 py-4 border-t flex items-center justify-end gap-3"
+              style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+            >
+              <button
+                onClick={handleResetStyles}
+                className="rounded-2xl border px-5 py-2.5 text-xs font-bold transition hover:bg-black/5"
+                style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}
+                type="button"
+              >
+                Restore Defaults
+              </button>
+              <button
+                onClick={() => setStylesModalOpen(false)}
+                className="rounded-2xl px-6 py-2.5 text-xs font-bold text-white transition active:scale-95 shadow-md"
+                style={{
+                  background: "var(--accent)",
+                  boxShadow: "0 4px 12px var(--accent-glow)",
+                }}
+                type="button"
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Styles Modal - Mobile */}
+      {isMobile && (
+        <MobileStylesSheet
+          open={stylesModalOpen}
+          onClose={() => setStylesModalOpen(false)}
+          config={formattingConfig}
+          onChange={setFormattingConfig}
+          citationStyle={citationStyle}
+          onReset={handleResetStyles}
+        />
+      )}
 
       {toast && (
         <Toast
           key={toast.id}
           msg={toast.msg}
           type={toast.type}
+          actionLabel={toast.actionLabel}
+          onAction={toast.onAction}
           onDismiss={() => setToast(null)}
         />
       )}

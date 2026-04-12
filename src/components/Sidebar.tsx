@@ -83,6 +83,7 @@ export default function Sidebar({
 
       <div className="h-px" style={{ background: "var(--border)" }} />
 
+
       {/* Appearance */}
       <div
         className="rounded-2xl border px-4 py-3 transition-colors"

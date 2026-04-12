@@ -75,17 +75,16 @@ export function PreviewModal({ open, onClose }: PreviewProps) {
 
   return (
     <div
-      className={`preview-backdrop${visible ? " open" : ""}`}
+      className={`sheet-backdrop${visible ? " open" : ""}`}
       onClick={(e) => {
         if (e.target === e.currentTarget) handleClose();
       }}
     >
-      <div className={`preview-modal${closing ? " closing" : ""}`}>
+      <div className={`sheet-modal${closing ? " closing" : ""}`}>
         {/* Header */}
         <div className="px-5 pt-4 pb-2 shrink-0">
           <div
-            className="mx-auto mb-3 h-1 w-10 rounded-full"
-            style={{ background: "var(--border)" }}
+            className="sheet-drag-handle"
           />
           <div className="flex items-center justify-between">
             <div>

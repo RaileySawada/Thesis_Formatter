@@ -30,6 +30,7 @@ const CT_NS = "http://schemas.openxmlformats.org/package/2006/content-types";
 
 // DrawingML main namespace — a:ln, a:solidFill, a:srgbClr, a:noFill, a:prstDash
 const A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main";
+import type { FormattingConfig } from "../constants";
 
 // ─── EMU constants ─────────────────────────────────────────────────────────────
 const UM_IMAGE_W_EMU = 6_552_000; // 18.20 cm × 360 000
@@ -48,6 +49,19 @@ const APPENDIX_BORDER_W_EMU = 38_100;
 // Full border width in EMU — used as effectExtent on all four sides so
 // Word does not clip any part of the border stroke, including top and bottom.
 const APPENDIX_BORDER_EXTENT_EMU = APPENDIX_BORDER_W_EMU; // 38 100
+
+function ptsToHalfPts(pts: number): number {
+  return Math.round(pts * 2);
+}
+function linesToTwips(lines: number): number {
+  return Math.round(lines * 240);
+}
+function inchesToTwips(inches: number): number {
+  return Math.round(inches * 1440);
+}
+function ptsToEMU(pts: number): number {
+  return Math.round(pts * 12700);
+}
 
 // ─── low-level helpers ─────────────────────────────────────────────────────────
 
@@ -353,28 +367,31 @@ function rewriteParagraphText(p: Element, text: string) {
 
 // ─── paragraph formatters ───────────────────────────────────────────────────────
 
-function applyAppendicesSectionTitle(p: Element) {
+function applyAppendicesSectionTitle(p: Element, config: FormattingConfig) {
   stripPPr(p);
-  uppercaseParagraph(p);
+  if (config.titles.textTransform === "uppercase") {
+    uppercaseParagraph(p);
+  }
+
   trimParagraphText(p);
 
   const pPr = ensurePPr(p);
   pPr.appendChild(wElem(p.ownerDocument!, "pageBreakBefore"));
 
   const jc = wElem(p.ownerDocument!, "jc");
-  setWAttr(jc, "val", "center");
+  setWAttr(jc, "val", config.titles.alignment);
   pPr.appendChild(jc);
 
   const ind = wElem(p.ownerDocument!, "ind");
   setWAttr(ind, "firstLine", "0");
-  setWAttr(ind, "left", "0");
+  setWAttr(ind, "left", String(inchesToTwips(config.titles.indentation)));
   setWAttr(ind, "right", "0");
   pPr.appendChild(ind);
 
   const sp = wElem(p.ownerDocument!, "spacing");
   setWAttr(sp, "before", "0");
   setWAttr(sp, "after", "0");
-  setWAttr(sp, "line", "720");
+  setWAttr(sp, "line", String(linesToTwips(config.titles.lineSpacing)));
   setWAttr(sp, "lineRule", "auto");
   setWAttr(sp, "beforeAutospacing", "0");
   setWAttr(sp, "afterAutospacing", "0");
@@ -384,11 +401,24 @@ function applyAppendicesSectionTitle(p: Element) {
   setWAttr(cs, "val", "0");
   pPr.appendChild(cs);
 
-  writePPrRPr(p, "Garamond", 28, true, false);
-  applyRunFormatting(p, "Garamond", 28, true, false);
+  const size = ptsToHalfPts(config.titles.fontSize);
+  writePPrRPr(
+    p,
+    config.titles.fontFamily,
+    size,
+    config.titles.bold ?? true,
+    config.titles.italic ?? false,
+  );
+  applyRunFormatting(
+    p,
+    config.titles.fontFamily,
+    size,
+    config.titles.bold ?? true,
+    config.titles.italic ?? false,
+  );
 }
 
-function applyAppendixLetter(p: Element, letter: string) {
+function applyAppendixLetter(p: Element, letter: string, config: FormattingConfig) {
   const canonical = `Appendix ${letter.toUpperCase()}`;
   rewriteParagraphText(p, canonical);
   stripPPr(p);
@@ -398,19 +428,19 @@ function applyAppendixLetter(p: Element, letter: string) {
   pPr.appendChild(wElem(p.ownerDocument!, "pageBreakBefore"));
 
   const jc = wElem(p.ownerDocument!, "jc");
-  setWAttr(jc, "val", "center");
+  setWAttr(jc, "val", config.titles.alignment);
   pPr.appendChild(jc);
 
   const ind = wElem(p.ownerDocument!, "ind");
   setWAttr(ind, "firstLine", "0");
-  setWAttr(ind, "left", "0");
+  setWAttr(ind, "left", String(inchesToTwips(config.titles.indentation)));
   setWAttr(ind, "right", "0");
   pPr.appendChild(ind);
 
   const sp = wElem(p.ownerDocument!, "spacing");
   setWAttr(sp, "before", "0");
   setWAttr(sp, "after", "0");
-  setWAttr(sp, "line", "240");
+  setWAttr(sp, "line", String(linesToTwips(config.titles.lineSpacing)));
   setWAttr(sp, "lineRule", "auto");
   setWAttr(sp, "beforeAutospacing", "0");
   setWAttr(sp, "afterAutospacing", "0");
@@ -420,31 +450,47 @@ function applyAppendixLetter(p: Element, letter: string) {
   setWAttr(cs, "val", "0");
   pPr.appendChild(cs);
 
-  writePPrRPr(p, "Garamond", 28, true, false);
-  applyRunFormatting(p, "Garamond", 28, true, false);
+  const size = ptsToHalfPts(config.titles.fontSize);
+  writePPrRPr(
+    p,
+    config.titles.fontFamily,
+    size,
+    config.titles.bold ?? true,
+    config.titles.italic ?? false,
+  );
+  applyRunFormatting(
+    p,
+    config.titles.fontFamily,
+    size,
+    config.titles.bold ?? true,
+    config.titles.italic ?? false,
+  );
 }
 
-function applyAppendixTitle(p: Element) {
+function applyAppendixTitle(p: Element, config: FormattingConfig) {
   stripPPr(p);
-  uppercaseParagraph(p);
+  if (config.titles.textTransform === "uppercase") {
+    uppercaseParagraph(p);
+  }
+
   trimParagraphText(p);
 
   const pPr = ensurePPr(p);
 
   const jc = wElem(p.ownerDocument!, "jc");
-  setWAttr(jc, "val", "center");
+  setWAttr(jc, "val", config.titles.alignment);
   pPr.appendChild(jc);
 
   const ind = wElem(p.ownerDocument!, "ind");
   setWAttr(ind, "firstLine", "0");
-  setWAttr(ind, "left", "0");
+  setWAttr(ind, "left", String(inchesToTwips(config.titles.indentation)));
   setWAttr(ind, "right", "0");
   pPr.appendChild(ind);
 
   const sp = wElem(p.ownerDocument!, "spacing");
   setWAttr(sp, "before", "0");
   setWAttr(sp, "after", "0");
-  setWAttr(sp, "line", "720");
+  setWAttr(sp, "line", String(linesToTwips(config.titles.lineSpacing)));
   setWAttr(sp, "lineRule", "auto");
   setWAttr(sp, "beforeAutospacing", "0");
   setWAttr(sp, "afterAutospacing", "0");
@@ -454,11 +500,28 @@ function applyAppendixTitle(p: Element) {
   setWAttr(cs, "val", "0");
   pPr.appendChild(cs);
 
-  writePPrRPr(p, "Garamond", 28, true, false);
-  applyRunFormatting(p, "Garamond", 28, true, false);
+  const size = ptsToHalfPts(config.titles.fontSize);
+  writePPrRPr(
+    p,
+    config.titles.fontFamily,
+    size,
+    config.titles.bold ?? true,
+    config.titles.italic ?? false,
+  );
+  applyRunFormatting(
+    p,
+    config.titles.fontFamily,
+    size,
+    config.titles.bold ?? true,
+    config.titles.italic ?? false,
+  );
 }
 
-function applyContinuationAppendixLabel(p: Element, currentLetter: string) {
+function applyContinuationAppendixLabel(
+  p: Element,
+  currentLetter: string,
+  config: FormattingConfig,
+) {
   const canonical = currentLetter
     ? `Continuation of Appendix ${currentLetter.toUpperCase()}...`
     : "Continuation of Appendix...";
@@ -468,19 +531,19 @@ function applyContinuationAppendixLabel(p: Element, currentLetter: string) {
   const pPr = ensurePPr(p);
 
   const jc = wElem(p.ownerDocument!, "jc");
-  setWAttr(jc, "val", "left");
+  setWAttr(jc, "val", config.appendixContinuation.alignment);
   pPr.appendChild(jc);
 
   const ind = wElem(p.ownerDocument!, "ind");
   setWAttr(ind, "firstLine", "0");
-  setWAttr(ind, "left", "0");
+  setWAttr(ind, "left", String(inchesToTwips(config.appendixContinuation.indentation)));
   setWAttr(ind, "right", "0");
   pPr.appendChild(ind);
 
   const sp = wElem(p.ownerDocument!, "spacing");
   setWAttr(sp, "before", "0");
   setWAttr(sp, "after", "0");
-  setWAttr(sp, "line", "720");
+  setWAttr(sp, "line", String(linesToTwips(config.appendixContinuation.lineSpacing)));
   setWAttr(sp, "lineRule", "auto");
   setWAttr(sp, "beforeAutospacing", "0");
   setWAttr(sp, "afterAutospacing", "0");
@@ -490,11 +553,24 @@ function applyContinuationAppendixLabel(p: Element, currentLetter: string) {
   setWAttr(cs, "val", "0");
   pPr.appendChild(cs);
 
-  writePPrRPr(p, "Garamond", 26, false, true);
-  applyRunFormatting(p, "Garamond", 26, false, true);
+  const size = ptsToHalfPts(config.appendixContinuation.fontSize);
+  writePPrRPr(
+    p,
+    config.appendixContinuation.fontFamily,
+    size,
+    config.appendixContinuation.bold ?? false,
+    config.appendixContinuation.italic ?? true,
+  );
+  applyRunFormatting(
+    p,
+    config.appendixContinuation.fontFamily,
+    size,
+    config.appendixContinuation.bold ?? false,
+    config.appendixContinuation.italic ?? true,
+  );
 }
 
-function applyEmptyParagraph(p: Element) {
+function applyEmptyParagraph(p: Element, config: FormattingConfig) {
   const pPr = ensurePPr(p);
   for (const tag of [
     "pStyle",
@@ -524,6 +600,14 @@ function applyEmptyParagraph(p: Element) {
   const cs = wElem(p.ownerDocument!, "contextualSpacing");
   setWAttr(cs, "val", "1");
   pPr.appendChild(cs);
+
+  writePPrRPr(
+    p,
+    config.body.fontFamily,
+    ptsToHalfPts(config.body.fontSize),
+    false,
+    false,
+  );
 }
 
 // ─── image helpers ─────────────────────────────────────────────────────────────
@@ -751,7 +835,7 @@ function setInlineEffectExtent(drawing: Element, marginEmu: number) {
   }
 }
 
-function applyUserManualImageParagraph(p: Element) {
+function applyUserManualImageParagraph(p: Element, config: FormattingConfig) {
   const pPr = ensurePPr(p);
   for (const tag of [
     "pStyle",
@@ -781,7 +865,7 @@ function applyUserManualImageParagraph(p: Element) {
  * CV image paragraph: centred, inline, no border of any kind.
  * clearDrawingBorder() removes any a:ln picture border from the source doc.
  */
-function applyCVImageParagraph(p: Element) {
+function applyCVImageParagraph(p: Element, config: FormattingConfig) {
   const pPr = ensurePPr(p);
   for (const tag of [
     "pStyle",
@@ -823,7 +907,7 @@ function applyCVImageParagraph(p: Element) {
  *
  * No w:pBdr paragraph border is used.
  */
-function applyAppendixFigureParagraph(p: Element, targetHeightEmu: number) {
+function applyAppendixFigureParagraph(p: Element, targetHeightEmu: number, config: FormattingConfig) {
   const pPr = ensurePPr(p);
   for (const tag of [
     "pStyle",
@@ -856,10 +940,10 @@ function applyAppendixFigureParagraph(p: Element, targetHeightEmu: number) {
     if (meetsThreshold) {
       resizeInlineImage(drawing, APPENDIX_TARGET_W_EMU, targetHeightEmu);
       // Set a 3 pt solid black outline directly on the image via a:ln in spPr.
-      setDrawingBorder(drawing, APPENDIX_BORDER_W_EMU);
+      setDrawingBorder(drawing, ptsToEMU(config.figure.borderWeight));
       // Expand effectExtent on all four sides by the full stroke width so
       // Word does not clip any part of the border, including top and bottom.
-      setInlineEffectExtent(drawing, APPENDIX_BORDER_EXTENT_EMU);
+      setInlineEffectExtent(drawing, ptsToEMU(config.figure.borderWeight));
     } else {
       // Ensure no stray picture border from the source document survives.
       clearDrawingBorder(drawing);
@@ -1071,7 +1155,7 @@ interface AppState {
 
 export async function formatAppendices(
   arrayBuffer: ArrayBuffer,
-  options?: { rules?: string[] },
+  options: { rules: string[]; config: FormattingConfig },
 ): Promise<Blob> {
   const rules: Record<string, boolean> = {};
   for (const r of options?.rules ?? []) rules[r] = true;
@@ -1244,6 +1328,18 @@ export async function formatAppendices(
         child.parentElement?.removeChild(child);
       } else {
         state.expectingTitle = false;
+        // Format table cells using config.table
+        Array.from(child.querySelectorAll("tc")).forEach((tc) => {
+          if (tc.namespaceURI !== W_NS) return;
+          Array.from(tc.querySelectorAll("p")).forEach((p) => {
+            if (p.namespaceURI !== W_NS) return;
+            writePAlignment(p, options.config.table.alignment);
+            writePSpacing(p, 0, 0, linesToTwips(options.config.table.lineSpacing));
+            const sz = ptsToHalfPts(options.config.table.fontSize);
+            writePPrRPr(p, options.config.table.fontFamily, sz, false, false);
+            applyRunFormatting(p, options.config.table.fontFamily, sz, false, false);
+          });
+        });
       }
       continue;
     }
@@ -1270,7 +1366,7 @@ export async function formatAppendices(
         state.zone = "cv";
         state.expectingTitle = false;
         state.cvSeen = true;
-        applyAppendicesSectionTitle(child);
+        applyAppendicesSectionTitle(child, options.config);
       } else {
         child.parentElement?.removeChild(child);
       }
@@ -1281,7 +1377,7 @@ export async function formatAppendices(
       if (hasSectPr) {
         // leave alone — defines section break
       } else if (hasDrawing) {
-        applyCVImageParagraph(child); // centred, inline, no border
+        applyCVImageParagraph(child, options.config);
       } else {
         child.parentElement?.removeChild(child);
       }
@@ -1297,7 +1393,7 @@ export async function formatAppendices(
     if (isAppendicesTitle) {
       state.zone = "appendices";
       state.expectingTitle = false;
-      applyAppendicesSectionTitle(child);
+      applyAppendicesSectionTitle(child, options.config);
       continue;
     }
 
@@ -1306,39 +1402,39 @@ export async function formatAppendices(
       state.currentLetter = appendixLetterM![1].toUpperCase();
       state.expectingTitle = true;
       state.afterContinuation = false;
-      applyAppendixLetter(child, state.currentLetter);
+      applyAppendixLetter(child, state.currentLetter, options.config);
       continue;
     }
 
     if (isContinuationLabel) {
       state.expectingTitle = false;
       state.afterContinuation = true;
-      applyContinuationAppendixLabel(child, state.currentLetter);
+      applyContinuationAppendixLabel(child, state.currentLetter, options.config);
       continue;
     }
 
     if (isUserManual) {
       state.zone = "user_manual";
       state.expectingTitle = false;
-      applyAppendixTitle(child);
+      applyAppendixTitle(child, options.config);
       continue;
     }
 
     if (txt === "" && !hasDrawing) {
-      if (!hasSectPr) applyEmptyParagraph(child);
+      if (!hasSectPr) applyEmptyParagraph(child, options.config);
       continue;
     }
 
     if (state.zone === "user_manual") {
       if (hasDrawing) {
-        applyUserManualImageParagraph(child);
+        applyUserManualImageParagraph(child, options.config);
       }
       continue;
     }
 
     if (state.expectingTitle && txt !== "") {
       state.expectingTitle = false;
-      applyAppendixTitle(child);
+      applyAppendixTitle(child, options.config);
       continue;
     }
 
@@ -1346,7 +1442,7 @@ export async function formatAppendices(
       const targetH = state.afterContinuation
         ? APPENDIX_TARGET_H_CONT_EMU
         : APPENDIX_TARGET_H_EMU;
-      applyAppendixFigureParagraph(child, targetH);
+      applyAppendixFigureParagraph(child, targetH, options.config);
       continue;
     }
   }

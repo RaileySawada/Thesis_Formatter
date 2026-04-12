@@ -37,6 +37,8 @@ interface Props {
   sectionIcons: Record<string, string>;
   citationStyle: CitationStyle;
   setCitationStyle: (v: CitationStyle) => void;
+  onOpenStyles: () => void;
+  onOpenPreview: () => void;
 }
 
 export default function MobileSheet({
@@ -48,6 +50,8 @@ export default function MobileSheet({
   toggleRule,
   citationStyle,
   setCitationStyle,
+  onOpenStyles,
+  onOpenPreview,
 }: Props) {
   const [visible, setVisible] = useState(false);
   const [closing, setClosing] = useState(false);
@@ -74,17 +78,16 @@ export default function MobileSheet({
 
   return (
     <div
-      className={`options-backdrop${visible ? " open" : ""}`}
+      className={`sheet-backdrop${visible ? " open" : ""}`}
       onClick={(e) => {
         if (e.target === e.currentTarget) handleClose();
       }}
     >
-      <div className={`options-modal${closing ? " closing" : ""}`}>
+      <div className={`sheet-modal${closing ? " closing" : ""}`}>
         <div className="px-5 pt-4 pb-2 shrink-0">
           {/* Drag handle — mobile only */}
           <div
-            className="options-drag-handle mx-auto mb-3 h-1 w-10 rounded-full"
-            style={{ background: "var(--border)" }}
+            className="sheet-drag-handle"
           />
           <div className="flex items-center justify-between">
             <div>
@@ -138,13 +141,13 @@ export default function MobileSheet({
                     style={
                       active
                         ? {
-                            borderColor: "var(--accent)",
-                            background: "var(--accent-subtle)",
-                          }
+                          borderColor: "var(--accent)",
+                          background: "var(--accent-subtle)",
+                        }
                         : {
-                            borderColor: "var(--border)",
-                            background: "var(--surface-raised)",
-                          }
+                          borderColor: "var(--border)",
+                          background: "var(--surface-raised)",
+                        }
                     }
                   >
                     <span
@@ -152,13 +155,13 @@ export default function MobileSheet({
                       style={
                         active
                           ? {
-                              background: "var(--accent-subtle-strong)",
-                              color: "var(--accent)",
-                            }
+                            background: "var(--accent-subtle-strong)",
+                            color: "var(--accent)",
+                          }
                           : {
-                              background: "var(--border)",
-                              color: "var(--text-secondary)",
-                            }
+                            background: "var(--border)",
+                            color: "var(--text-secondary)",
+                          }
                       }
                     >
                       <i className={`fa-solid ${cs.icon}`} />
@@ -192,6 +195,50 @@ export default function MobileSheet({
                   </button>
                 );
               })}
+            </div>
+          </div>
+
+          {/* Quick Tools */}
+          <div className="pt-2">
+            <p
+              className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em]"
+              style={{ color: "var(--text-muted)" }}
+            >
+              <i className="fa-solid fa-screwdriver-wrench mr-1" /> Quick Tools
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  handleClose();
+                  setTimeout(onOpenStyles, 350);
+                }}
+                className="flex-1 flex items-center justify-center gap-2 rounded-2xl border px-4 py-3.5 text-xs font-bold transition active:scale-95"
+                style={{
+                  borderColor: "var(--border)",
+                  color: "var(--accent)",
+                  background: "var(--accent-subtle)",
+                }}
+              >
+                <i className="fa-solid fa-wand-magic-sparkles" />
+                Styles
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  handleClose();
+                  setTimeout(onOpenPreview, 350);
+                }}
+                className="flex-1 flex items-center justify-center gap-2 rounded-2xl border px-4 py-3.5 text-xs font-bold transition active:scale-95"
+                style={{
+                  borderColor: "var(--border)",
+                  color: "var(--text-secondary)",
+                  background: "var(--surface-raised)",
+                }}
+              >
+                <i className="fa-solid fa-eye" />
+                Preview
+              </button>
             </div>
           </div>
 
@@ -253,9 +300,9 @@ export default function MobileSheet({
                     style={
                       isSelected
                         ? {
-                            border: "2px solid var(--accent)",
-                            background: "var(--accent-subtle)",
-                          }
+                          border: "2px solid var(--accent)",
+                          background: "var(--accent-subtle)",
+                        }
                         : { border: "1px solid var(--border)" }
                     }
                     onClick={() => toggleSection(sec.value)}
@@ -265,13 +312,13 @@ export default function MobileSheet({
                       style={
                         isSelected
                           ? {
-                              background: "var(--accent-subtle-strong)",
-                              color: "var(--accent)",
-                            }
+                            background: "var(--accent-subtle-strong)",
+                            color: "var(--accent)",
+                          }
                           : {
-                              background: "var(--surface-raised)",
-                              color: "var(--text-muted)",
-                            }
+                            background: "var(--surface-raised)",
+                            color: "var(--text-muted)",
+                          }
                       }
                     >
                       <i className={`fa-solid ${sec.icon} text-xs`} />

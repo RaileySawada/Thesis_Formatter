@@ -14,6 +14,7 @@ const A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main";
 const WPS_NS =
   "http://schemas.microsoft.com/office/word/2010/wordprocessingShape";
 const MC_NS = "http://schemas.openxmlformats.org/markup-compatibility/2006";
+import type { FormattingConfig } from "../constants";
 
 // ─── low-level helpers ───────────────────────────────────────────────────────
 
@@ -84,6 +85,16 @@ function getParagraphText(p: Element): string {
 }
 function normalizeText(t: string): string {
   return t.replace(/\s+/gu, " ").trim();
+}
+
+function ptsToHalfPts(pts: number): number {
+  return Math.round(pts * 2);
+}
+function linesToTwips(lines: number): number {
+  return Math.round(lines * 240);
+}
+function inchesToTwips(inches: number): number {
+  return Math.round(inches * 1440);
 }
 
 // ─── content control unwrapper ───────────────────────────────────────────────
@@ -325,7 +336,7 @@ function uppercaseParagraph(p: Element) {
 
 // ─── format appliers ─────────────────────────────────────────────────────────
 
-function applyPreliminaryTitle(p: Element) {
+function applyPreliminaryTitle(p: Element, config: FormattingConfig) {
   const pPr = ensurePPr(p);
   removeChildren(pPr, "ind");
   removeChildren(pPr, "spacing");
@@ -333,25 +344,28 @@ function applyPreliminaryTitle(p: Element) {
   removeChildren(pPr, "rPr");
   removeChildren(pPr, "jc");
 
-  uppercaseParagraph(p);
+  if (config.titles.textTransform === "uppercase") {
+    uppercaseParagraph(p);
+  }
 
-  // Explicitly force center alignment — never rely on style inheritance
+  // Explicitly force alignment
   const jc = wElem(p.ownerDocument!, "jc");
-  setWAttr(jc, "val", "center");
+  setWAttr(jc, "val", config.titles.alignment);
   pPr.appendChild(jc);
 
-  // Indent: 0 all sides
+  // Indent
   const ind = wElem(p.ownerDocument!, "ind");
+  const twips = inchesToTwips(config.titles.indentation);
   setWAttr(ind, "firstLine", "0");
-  setWAttr(ind, "left", "0");
+  setWAttr(ind, "left", String(twips));
   setWAttr(ind, "right", "0");
   pPr.appendChild(ind);
 
-  // Spacing: 3.0 line (720 = 3 × 240), 0 before/after
+  // Spacing: using config line spacing
   const sp = wElem(p.ownerDocument!, "spacing");
   setWAttr(sp, "before", "0");
   setWAttr(sp, "after", "0");
-  setWAttr(sp, "line", "720");
+  setWAttr(sp, "line", String(linesToTwips(config.titles.lineSpacing)));
   setWAttr(sp, "lineRule", "auto");
   setWAttr(sp, "beforeAutospacing", "0");
   setWAttr(sp, "afterAutospacing", "0");
@@ -365,78 +379,100 @@ function applyPreliminaryTitle(p: Element) {
   // Page break before
   pPr.appendChild(wElem(p.ownerDocument!, "pageBreakBefore"));
 
-  // Paragraph mark rPr: Garamond 14pt (28 half-points), bold
-  writePPrRPr(p, "Garamond", 28, true, false);
-
-  // Run formatting: Garamond 14pt, bold
-  applyRunFormatting(p, "Garamond", 28, true, false);
+  const size = ptsToHalfPts(config.titles.fontSize);
+  writePPrRPr(
+    p,
+    config.titles.fontFamily,
+    size,
+    config.titles.bold ?? true,
+    config.titles.italic ?? false,
+  );
+  applyRunFormatting(
+    p,
+    config.titles.fontFamily,
+    size,
+    config.titles.bold ?? true,
+    config.titles.italic ?? false,
+  );
 }
 
-function applyPreliminaryBody(p: Element) {
+function applyPreliminaryBody(p: Element, config: FormattingConfig) {
   stripTabRuns(p);
   stripPPr(p);
-  writePAlignment(p, "both");
-  writePIndent(p, 720, 0, 0);
-  writePSpacing(p, 0, 0, 480);
-  writePPrRPr(p, "Garamond", 24, false, false);
-  applyRunFormatting(p, "Garamond", 24, null, null);
+  writePAlignment(p, config.body.alignment);
+  writePIndent(p, inchesToTwips(config.body.indentation), 0, 0);
+  writePSpacing(p, 0, 0, linesToTwips(config.body.lineSpacing));
+  const size = ptsToHalfPts(config.body.fontSize);
+  writePPrRPr(p, config.body.fontFamily, size, false, false);
+  applyRunFormatting(p, config.body.fontFamily, size, null, null);
 }
 
-function applySignatory(p: Element) {
+function applySignatory(p: Element, config: FormattingConfig) {
   stripPPr(p);
   writePAlignment(p, "center");
   writePIndent(p, 0, 0, 0);
-  writePSpacing(p, 0, 0, 240);
-  writePPrRPr(p, "Garamond", 24, true, false);
-  applyRunFormatting(p, "Garamond", 24, true, false);
+  writePSpacing(p, 0, 0, linesToTwips(config.body.lineSpacing / 2));
+  const size = ptsToHalfPts(config.body.fontSize);
+  writePPrRPr(p, config.body.fontFamily, size, true, false);
+  applyRunFormatting(p, config.body.fontFamily, size, true, false);
 }
 
-function applyDesignation(p: Element) {
+function applyDesignation(p: Element, config: FormattingConfig) {
   stripTabRuns(p);
   stripPPr(p);
   writePAlignment(p, "center");
   writePIndent(p, 0, 0, 0);
-  writePSpacing(p, 0, 0, 480);
-  writePPrRPr(p, "Garamond", 24, false, false);
-  applyRunFormatting(p, "Garamond", 24, false, false);
+  writePSpacing(p, 0, 0, linesToTwips(config.body.lineSpacing));
+  const size = ptsToHalfPts(config.body.fontSize);
+  writePPrRPr(p, config.body.fontFamily, size, false, false);
+  applyRunFormatting(p, config.body.fontFamily, size, false, false);
 }
 
-function applySignatoryRight(p: Element) {
+function applySignatoryRight(p: Element, config: FormattingConfig) {
   stripTabRuns(p);
   stripPPr(p);
   writePAlignment(p, "right");
   writePIndent(p, 0, 0, 0);
-  writePSpacing(p, 0, 0, 240);
-  writePPrRPr(p, "Garamond", 24, true, false);
-  applyRunFormatting(p, "Garamond", 24, true, false);
+  writePSpacing(p, 0, 0, linesToTwips(config.body.lineSpacing / 2));
+  const size = ptsToHalfPts(config.body.fontSize);
+  writePPrRPr(p, config.body.fontFamily, size, true, false);
+  applyRunFormatting(p, config.body.fontFamily, size, true, false);
 }
 
-function applyDesignationRight(p: Element) {
+function applyDesignationRight(p: Element, config: FormattingConfig) {
   stripTabRuns(p);
   stripPPr(p);
   writePAlignment(p, "right");
   writePIndent(p, 0, 0, 0);
-  writePSpacing(p, 0, 0, 480);
-  writePPrRPr(p, "Garamond", 24, false, false);
-  applyRunFormatting(p, "Garamond", 24, false, false);
+  writePSpacing(p, 0, 0, linesToTwips(config.body.lineSpacing));
+  const size = ptsToHalfPts(config.body.fontSize);
+  writePPrRPr(p, config.body.fontFamily, size, false, false);
+  applyRunFormatting(p, config.body.fontFamily, size, false, false);
 }
 
-function applyInitials(p: Element) {
+function applyInitials(p: Element, config: FormattingConfig) {
   stripPPr(p);
   writePAlignment(p, "right");
   writePIndent(p, 0, 0, 0);
-  writePSpacing(p, 0, 0, 480);
-  writePPrRPr(p, "Garamond", 24, true, false);
-  applyRunFormatting(p, "Garamond", 24, true, false);
+  writePSpacing(p, 0, 0, linesToTwips(config.body.lineSpacing));
+  const size = ptsToHalfPts(config.body.fontSize);
+  writePPrRPr(p, config.body.fontFamily, size, true, false);
+  applyRunFormatting(p, config.body.fontFamily, size, true, false);
 }
 
-function applyKeywordsLine(p: Element) {
+function applyKeywordsLine(p: Element, config: FormattingConfig) {
   stripTabRuns(p);
   stripPPr(p);
-  writePAlignment(p, "both");
+  writePAlignment(p, config.body.alignment);
   writePIndent(p, 0, 0, 0);
-  writePSpacing(p, 0, 0, 480);
-  writePPrRPr(p, "Garamond", 24, false, true);
+  writePSpacing(p, 0, 0, linesToTwips(config.body.lineSpacing));
+  writePPrRPr(
+    p,
+    config.body.fontFamily,
+    ptsToHalfPts(config.body.fontSize),
+    false,
+    true,
+  );
 
   const textRuns = Array.from(p.querySelectorAll("r")).filter(
     (r) =>
@@ -447,6 +483,7 @@ function applyKeywordsLine(p: Element) {
   );
 
   let colonFound = false;
+  const sizeVal = String(ptsToHalfPts(config.body.fontSize));
   for (const run of textRuns) {
     const tEl = run.getElementsByTagNameNS(W_NS, "t").item(0) as Element | null;
     const text = tEl?.textContent ?? "";
@@ -457,14 +494,14 @@ function applyKeywordsLine(p: Element) {
 
     const rFonts = wElem(run.ownerDocument!, "rFonts");
     for (const a of ["ascii", "hAnsi", "eastAsia", "cs"])
-      setWAttr(rFonts, a, "Garamond");
+      setWAttr(rFonts, a, config.body.fontFamily);
     rPr.appendChild(rFonts);
 
     const sz = wElem(run.ownerDocument!, "sz");
-    setWAttr(sz, "val", "24");
+    setWAttr(sz, "val", sizeVal);
     rPr.appendChild(sz);
     const szCs = wElem(run.ownerDocument!, "szCs");
-    setWAttr(szCs, "val", "24");
+    setWAttr(szCs, "val", sizeVal);
     rPr.appendChild(szCs);
 
     rPr.appendChild(wElem(run.ownerDocument!, "i"));
@@ -478,7 +515,7 @@ function applyKeywordsLine(p: Element) {
   }
 }
 
-function applyEmptyParagraph(p: Element, line = 240) {
+function applyEmptyParagraph(p: Element, config: FormattingConfig, line = 240) {
   // Remove any runs containing only line breaks (soft returns) — these create phantom blank lines
   Array.from(p.childNodes)
     .filter(
@@ -501,7 +538,13 @@ function applyEmptyParagraph(p: Element, line = 240) {
   setWAttr(sp, "beforeAutospacing", "0");
   setWAttr(sp, "afterAutospacing", "0");
   pPr.appendChild(sp);
-  writePPrRPr(p, "Garamond", 24, false, false);
+  writePPrRPr(
+    p,
+    config.body.fontFamily,
+    ptsToHalfPts(config.body.fontSize),
+    false,
+    false,
+  );
 }
 
 // ─── section title detection ─────────────────────────────────────────────────
@@ -658,7 +701,11 @@ interface PrelimState {
 
 // ─── per-paragraph processor ─────────────────────────────────────────────────
 
-function processPrelimParagraph(p: Element, state: PrelimState) {
+function processPrelimParagraph(
+  p: Element,
+  state: PrelimState,
+  config: FormattingConfig,
+) {
   const text = getParagraphText(p);
   const normalized = normalizeText(text);
   const inTable = isInTable(p);
@@ -672,7 +719,7 @@ function processPrelimParagraph(p: Element, state: PrelimState) {
       state.approvalRightBlockDone = false;
       state.prevWasRightSignatory = false;
       rewriteTitleText(p, detected);
-      applyPreliminaryTitle(p);
+      applyPreliminaryTitle(p, config);
       return;
     }
   }
@@ -685,7 +732,7 @@ function processPrelimParagraph(p: Element, state: PrelimState) {
 
   if (normalized === "") {
     const emptyLine = sec === "approval_sheet" ? 240 : 480;
-    applyEmptyParagraph(p, emptyLine);
+    applyEmptyParagraph(p, config, emptyLine);
     return;
   }
 
@@ -700,9 +747,9 @@ function processPrelimParagraph(p: Element, state: PrelimState) {
   if (sec === "abstract") {
     state.prevWasSignatory = false;
     if (/^keywords?\s*:/iu.test(normalized)) {
-      applyKeywordsLine(p);
+      applyKeywordsLine(p, config);
     } else {
-      applyPreliminaryBody(p);
+      applyPreliminaryBody(p, config);
     }
     return;
   }
@@ -712,9 +759,9 @@ function processPrelimParagraph(p: Element, state: PrelimState) {
       state.inInitialsBlock = true;
     }
     if (state.inInitialsBlock) {
-      applyInitials(p);
+      applyInitials(p, config);
     } else {
-      applyPreliminaryBody(p);
+      applyPreliminaryBody(p, config);
     }
     state.prevWasSignatory = false;
     return;
@@ -729,39 +776,39 @@ function processPrelimParagraph(p: Element, state: PrelimState) {
         return;
       }
       if (looksLikeSignatory(p, normalized)) {
-        applySignatoryRight(p);
+        applySignatoryRight(p, config);
         state.prevWasRightSignatory = true;
         state.prevWasSignatory = false;
         return;
       }
       state.prevWasRightSignatory = false;
       state.prevWasSignatory = false;
-      applyPreliminaryBody(p);
+      applyPreliminaryBody(p, config);
       return;
     }
 
     if (looksLikeDesignation(normalized) || state.prevWasSignatory) {
-      applyDesignation(p);
+      applyDesignation(p, config);
       state.prevWasSignatory = false;
       return;
     }
     if (looksLikeSignatory(p, normalized)) {
-      applySignatory(p);
+      applySignatory(p, config);
       state.prevWasSignatory = true;
       return;
     }
     state.prevWasSignatory = false;
-    applyPreliminaryBody(p);
+    applyPreliminaryBody(p, config);
     return;
   }
 
   if (sec === "dedication") {
     state.prevWasSignatory = false;
-    applyPreliminaryBody(p);
+    applyPreliminaryBody(p, config);
     return;
   }
 
-  applyPreliminaryBody(p);
+  applyPreliminaryBody(p, config);
 }
 
 // ─── table unfloat ────────────────────────────────────────────────────────────
@@ -777,7 +824,7 @@ function unfloatTable(tbl: Element) {
 
 // ─── abstract separator line builder ─────────────────────────────────────────
 
-function buildAbstractSeparatorP(doc: Document): Element {
+function buildAbstractSeparatorP(doc: Document, config: FormattingConfig): Element {
   const p = doc.createElementNS(W_NS, "w:p");
 
   const pPr = doc.createElementNS(W_NS, "w:pPr");
@@ -919,7 +966,7 @@ function buildAbstractSeparatorP(doc: Document): Element {
     ' id="Straight Connector 10"' +
     ' style="visibility:visible;mso-wrap-style:square"' +
     ' from="0,0" to="427.1pt,0"' +
-    ' strokecolor="black" strokeweight="3pt">' +
+    ` strokecolor="black" strokeweight="${config.figure.borderWeight}pt">` +
     '<v:stroke joinstyle="miter"/>' +
     "<w10:anchorlock/>" +
     "</v:line>" +
@@ -934,12 +981,13 @@ function buildAbstractSeparatorP(doc: Document): Element {
 
 // ─── abstract table formatter ────────────────────────────────────────────────
 
-function formatAbstractTable(tbl: Element) {
+function formatAbstractTable(tbl: Element, config: FormattingConfig) {
   const rows = Array.from(tbl.querySelectorAll("tr")).filter(
     (r) => r.namespaceURI === W_NS,
   );
 
   let firstDataRowIdx = -1;
+  const size = ptsToHalfPts(config.body.fontSize);
   for (let i = 0; i < rows.length; i++) {
     const cells = Array.from(rows[i].querySelectorAll("tc")).filter(
       (tc) => tc.namespaceURI === W_NS,
@@ -982,7 +1030,7 @@ function formatAbstractTable(tbl: Element) {
           const sp = wElem(p.ownerDocument!, "spacing");
           setWAttr(sp, "before", "0");
           setWAttr(sp, "after", "0");
-          setWAttr(sp, "line", "240");
+          setWAttr(sp, "line", String(linesToTwips(config.body.lineSpacing / 2)));
           setWAttr(sp, "lineRule", "auto");
           setWAttr(sp, "beforeAutospacing", "0");
           setWAttr(sp, "afterAutospacing", "0");
@@ -997,20 +1045,20 @@ function formatAbstractTable(tbl: Element) {
         if (isCol1) {
           stripTabRuns(p);
           stripPPr(p);
-          writePAlignment(p, "left");
-          writePIndent(p, 0, 0, 0);
-          writePSpacing(p, 0, 0, 240);
-          writePPrRPr(p, "Garamond", 24, false, false);
-          applyRunFormatting(p, "Garamond", 24, false, false);
+          writePAlignment(p, config.table.alignment);
+          writePSpacing(p, 0, 0, linesToTwips(config.table.lineSpacing / 2));
+          const size = ptsToHalfPts(config.table.fontSize);
+          writePPrRPr(p, config.table.fontFamily, size, false, false);
+          applyRunFormatting(p, config.table.fontFamily, size, false, false);
         } else if (isCol2) {
           if (isFirstDataRow) uppercaseParagraph(p);
           stripTabRuns(p);
           stripPPr(p);
-          writePAlignment(p, "both");
+          writePAlignment(p, config.body.alignment);
           writePIndent(p, 0, 0, 0);
-          writePSpacing(p, 0, 0, 240);
-          writePPrRPr(p, "Garamond", 24, true, false);
-          applyRunFormatting(p, "Garamond", 24, true, false);
+          writePSpacing(p, 0, 0, linesToTwips(config.body.lineSpacing / 2));
+          writePPrRPr(p, config.body.fontFamily, size, true, false);
+          applyRunFormatting(p, config.body.fontFamily, size, true, false);
         }
       }
     });
@@ -1021,7 +1069,7 @@ function formatAbstractTable(tbl: Element) {
 
 export async function formatPreliminary(
   arrayBuffer: ArrayBuffer,
-  options?: { rules?: string[] },
+  options: { rules: string[]; config: FormattingConfig },
 ): Promise<Blob> {
   const rules: Record<string, boolean> = {};
   for (const r of options?.rules ?? []) rules[r] = true;
@@ -1126,7 +1174,7 @@ export async function formatPreliminary(
     if (!(child instanceof Element)) continue;
     if (child.parentElement !== body) continue;
     if (child.localName === "p") {
-      processPrelimParagraph(child, state);
+      processPrelimParagraph(child, state, options.config);
     } else if (child.localName === "tbl") {
       unfloatTable(child);
       if (state.section === "approval_sheet") {
@@ -1134,7 +1182,7 @@ export async function formatPreliminary(
         state.prevWasRightSignatory = false;
       }
       if (state.section === "abstract") {
-        formatAbstractTable(child);
+        formatAbstractTable(child, options.config);
         const nextSib = child.nextSibling as Element | null;
         const nextHasDrawing =
           nextSib instanceof Element &&
@@ -1142,7 +1190,7 @@ export async function formatPreliminary(
           (nextSib.getElementsByTagNameNS(W_NS, "drawing").length > 0 ||
             nextSib.getElementsByTagNameNS(W_NS, "pict").length > 0);
         if (!nextHasDrawing) {
-          const sep = buildAbstractSeparatorP(child.ownerDocument!);
+          const sep = buildAbstractSeparatorP(child.ownerDocument!, options.config);
           if (child.nextSibling) {
             body.insertBefore(sep, child.nextSibling);
           } else {

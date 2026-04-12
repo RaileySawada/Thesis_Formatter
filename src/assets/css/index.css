@@ -350,8 +350,8 @@ body[data-theme="dark"] {
   opacity: 0.4 !important;
 }
 
-/* ── Options modal (responsive — sheet on mobile, dialog on desktop) ─ */
-.options-backdrop {
+/* ── Generic bottom sheets (responsive — sheet on mobile, dialog on desktop) ─ */
+.sheet-backdrop {
   display: none;
   position: fixed;
   inset: 0;
@@ -360,31 +360,32 @@ body[data-theme="dark"] {
   align-items: flex-end;
   justify-content: center;
 }
-.options-backdrop.open {
-  display: flex;
+.sheet-backdrop.open {
+  display: flex !important;
   animation: backdropIn 0.25s ease forwards;
 }
-.options-backdrop.closing {
+.sheet-backdrop.closing {
   display: flex !important;
   animation: backdropOut 0.32s ease forwards;
 }
 @media (min-width: 640px) {
-  .options-backdrop.open,
-  .options-backdrop.closing {
+  .sheet-backdrop.open,
+  .sheet-backdrop.closing {
     align-items: center;
   }
 }
 
-.options-modal {
+.sheet-modal {
   flex-direction: column;
   background: var(--surface);
   will-change: transform;
   width: 100%;
+  display: flex;
 }
 
 /* Mobile: slide up sheet */
 @media (max-width: 639px) {
-  .options-modal {
+  .sheet-modal {
     position: fixed;
     bottom: 0;
     left: 0;
@@ -393,17 +394,17 @@ body[data-theme="dark"] {
     max-height: 92dvh;
     border-radius: 24px 24px 0 0;
     box-shadow: 0 -4px 32px rgba(0, 0, 0, 0.22);
-    display: flex;
     animation: slideSheetUp 0.42s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    padding-bottom: env(safe-area-inset-bottom);
   }
-  .options-modal.closing {
+  .sheet-modal.closing {
     animation: slideSheetDown 0.32s cubic-bezier(0.55, 0, 1, 0.45) forwards;
   }
 }
 
 /* Desktop: centered dialog */
 @media (min-width: 640px) {
-  .options-modal {
+  .sheet-modal {
     position: relative;
     max-width: 520px;
     max-height: 80dvh;
@@ -411,86 +412,23 @@ body[data-theme="dark"] {
     border: 1px solid var(--border);
     box-shadow: 0 32px 80px rgba(0, 0, 0, 0.35);
     overflow: hidden;
-    display: flex;
     animation: dialogFadeIn 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   }
-  .options-modal.closing {
+  .sheet-modal.closing {
     animation: dialogFadeOut 0.24s ease forwards;
   }
-  /* Hide drag handle on desktop */
-  .options-drag-handle {
+}
+
+.sheet-drag-handle {
+  width: 40px;
+  height: 4px;
+  background: var(--border);
+  border-radius: 999px;
+  margin: 12px auto 8px;
+}
+@media (min-width: 640px) {
+  .sheet-drag-handle {
     display: none;
-  }
-}
-
-/* ── Preview modal ───────────────────────────────────────────────── */
-.preview-backdrop {
-  display: none;
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  background: rgba(0, 0, 0, 0.65);
-  align-items: flex-end;
-  justify-content: center;
-}
-.preview-backdrop.open {
-  display: flex;
-  animation: backdropIn 0.25s ease forwards;
-}
-.preview-backdrop.closing {
-  display: flex !important;
-  animation: backdropOut 0.32s ease forwards;
-}
-@media (min-width: 640px) {
-  .preview-backdrop.open {
-    align-items: center;
-  }
-  .preview-backdrop.closing {
-    align-items: center;
-  }
-}
-
-.preview-modal {
-  flex-direction: column;
-  background: var(--surface);
-  will-change: transform;
-  width: 100%;
-}
-
-/* Mobile: slide up/down */
-@media (max-width: 639px) {
-  .preview-modal {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    z-index: 51;
-    max-height: 92dvh;
-    border-radius: 24px 24px 0 0;
-    box-shadow: 0 -4px 32px rgba(0, 0, 0, 0.22);
-    display: flex;
-    animation: slideSheetUp 0.42s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-  }
-  .preview-modal.closing {
-    animation: slideSheetDown 0.32s cubic-bezier(0.55, 0, 1, 0.45) forwards;
-  }
-}
-
-/* Desktop: fade in/out */
-@media (min-width: 640px) {
-  .preview-modal {
-    position: relative;
-    max-width: 520px;
-    max-height: 80dvh;
-    border-radius: 24px;
-    border: 1px solid var(--border);
-    box-shadow: 0 32px 80px rgba(0, 0, 0, 0.35);
-    overflow: hidden;
-    display: flex;
-    animation: dialogFadeIn 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-  }
-  .preview-modal.closing {
-    animation: dialogFadeOut 0.24s ease forwards;
   }
 }
 

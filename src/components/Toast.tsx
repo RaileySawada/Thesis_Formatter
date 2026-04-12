@@ -1,15 +1,27 @@
+import React from "react";
+
 interface ToastProps {
   msg: string;
   onDismiss: () => void;
   type?: "success" | "error";
+  actionLabel?: string;
+  onAction?: () => void;
 }
 
 export default function Toast({
   msg,
   onDismiss,
   type = "success",
+  actionLabel,
+  onAction,
 }: ToastProps) {
   const isError = type === "error";
+
+  const handleAction = () => {
+    if (onAction) onAction();
+    onDismiss();
+  };
+
   return (
     <div className={`tf-toast tf-toast--${type}`} role="alert">
       <div className="tf-toast-icon-wrap">
@@ -43,10 +55,20 @@ export default function Toast({
       </div>
       <div className="tf-toast-body">
         <p className="tf-toast-title">
-          {isError ? "Something went wrong" : "Formatting complete"}
+          {isError ? "Something went wrong" : "System Notification"}
         </p>
         <p className="tf-toast-msg">{msg}</p>
       </div>
+
+      {actionLabel && onAction && (
+        <button
+          className="ml-4 px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white text-[10px] font-bold uppercase tracking-wider transition-colors active:scale-95 border border-white/10"
+          onClick={handleAction}
+        >
+          {actionLabel}
+        </button>
+      )}
+
       <button
         className="tf-toast-close"
         onClick={onDismiss}
