@@ -995,8 +995,10 @@ function applyBodyParagraph(
 
   removePBdr(p);
   const size = ptsToHalfPts(config.body.fontSize);
-  writeRuns(p, config.body.fontFamily, size, null, null);
-  writePPrRPr(p, config.body.fontFamily, size, false, false);
+  const bold = config.body.bold ?? false;
+  const italic = config.body.italic ?? false;
+  writeRuns(p, config.body.fontFamily, size, bold, italic);
+  writePPrRPr(p, config.body.fontFamily, size, bold, italic);
 }
 
 function applyReferenceEntry(p: Element, rules: Rules, config: FormattingConfig) {
@@ -1015,8 +1017,10 @@ function applyReferenceEntry(p: Element, rules: Rules, config: FormattingConfig)
     writePSpacing(p, 0, 0, linesToTwips(config.references.lineSpacing));
 
   const size = ptsToHalfPts(config.references.fontSize);
-  writeRuns(p, config.references.fontFamily, size, false, false);
-  writePPrRPr(p, config.references.fontFamily, size, false, false);
+  const bold = config.references.bold ?? false;
+  const italic = config.references.italic ?? false;
+  writeRuns(p, config.references.fontFamily, size, bold, italic);
+  writePPrRPr(p, config.references.fontFamily, size, bold, italic);
 }
 
 // ─── List paragraph formatter ────────────────────────────────────────────────
@@ -1090,8 +1094,10 @@ function applyListParagraph(p: Element, rules: Rules, config: FormattingConfig) 
   }
 
   const size = ptsToHalfPts(config.body.fontSize);
-  writeRuns(p, config.body.fontFamily, size, false, false);
-  writePPrRPr(p, config.body.fontFamily, size, false, false);
+  const bold = config.body.bold ?? false;
+  const italic = config.body.italic ?? false;
+  writeRuns(p, config.body.fontFamily, size, bold, italic);
+  writePPrRPr(p, config.body.fontFamily, size, bold, italic);
 }
 
 function applyFigureCaption(p: Element, rules: Rules, config: FormattingConfig) {
@@ -1825,8 +1831,10 @@ function processTable(tbl: Element, rules: Rules, config: FormattingConfig, stat
       if (rules.spacing) writePSpacing(p, 0, 0, linesToTwips(config.table.lineSpacing));
       if (rules.indentation) writePIndent(p, 0);
       const size = ptsToHalfPts(config.table.fontSize);
-      writeRuns(p, config.table.fontFamily, size, false, false);
-      writePPrRPr(p, config.table.fontFamily, size, false, false);
+      const bold = config.table.bold ?? false;
+      const italic = config.table.italic ?? false;
+      writeRuns(p, config.table.fontFamily, size, bold, italic);
+      writePPrRPr(p, config.table.fontFamily, size, bold, italic);
     });
   });
 }

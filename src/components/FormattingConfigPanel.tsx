@@ -33,7 +33,7 @@ const INCH_TO_PX = 72 * PT_TO_PX_SCALE;
 
 const contextBodyCss = (alignment: any = "both") => ({
   fontFamily: "Garamond",
-  fontSize: `${12 * PT_TO_PX_SCALE}px`, 
+  fontSize: `${12 * PT_TO_PX_SCALE}px`,
   lineHeight: 1.5,
   textAlign: alignment === "both" ? "justify" : alignment,
   color: "#334155"
@@ -55,18 +55,18 @@ const Stepper = ({ value, onChange, step = 1, min = 0, label }: {
     <div className="flex items-center overflow-hidden rounded-xl border" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
       <button
         type="button"
-        onClick={() => onChange(Math.max(min, value - step))}
+        onClick={() => onChange(Number(Math.max(min, value - step).toFixed(2)))}
         className="flex h-9 w-9 items-center justify-center transition hover:bg-black/5"
         style={{ borderRight: "1px solid var(--border)", color: "var(--text-secondary)" }}
       >
         <i className="fa-solid fa-minus text-[10px]" />
       </button>
       <div className="flex-1 text-center text-xs font-bold" style={{ color: "var(--text-primary)" }}>
-        {(typeof value === 'number' && !isNaN(value)) ? value.toFixed(step < 1 ? 1 : 0) : value}
+        {(typeof value === 'number' && !isNaN(value)) ? value.toFixed(step % 1 === 0 ? 0 : 2) : value}
       </div>
       <button
         type="button"
-        onClick={() => onChange(value + step)}
+        onClick={() => onChange(Number((value + step).toFixed(2)))}
         className="flex h-9 w-9 items-center justify-center transition hover:bg-black/5"
         style={{ borderLeft: "1px solid var(--border)", color: "var(--text-secondary)" }}
       >
@@ -127,7 +127,7 @@ const MultiToggle = ({ items }: { items: { label: string; value: boolean; onChan
 
 const PreviewTable = ({ style }: { style: any }) => (
   <div className="overflow-hidden rounded-md border" style={{ borderColor: "#cbd5e1" }}>
-    <table className="w-full border-collapse bg-white" style={{ 
+    <table className="w-full border-collapse bg-white" style={{
       fontFamily: style?.fontFamily || "inherit",
       fontSize: `${(style?.fontSize || 10) * PT_TO_PX_SCALE}px`,
       lineHeight: style?.lineSpacing || 1.0,
@@ -161,20 +161,21 @@ const Preview = ({
   citationStyle
 }: {
   style: ElementStyle | any;
-  type?: "body" | "title" | "heading" | "chapter" | "table" | "figure" | "references" | "tableContinuation" | "appendixContinuation" | "caption" | "legend";
+  type?: "body" | "title" | "heading" | "chapter" | "table" | "figure" | "references" | "tableContinuation" | "appendixContinuation" | "appendixLetter" | "caption" | "legend";
   title: string;
   config: FormattingConfig;
   citationStyle: "ieee" | "apa";
 }) => {
   const cssStyle = (s: any) => ({
     fontFamily: s?.fontFamily || "inherit",
-    fontSize: `${(s?.fontSize || 12) * PT_TO_PX_SCALE}px`, 
+    fontSize: `${(s?.fontSize || 12) * PT_TO_PX_SCALE}px`,
     lineHeight: s?.lineSpacing || 1.5,
     textAlign: (s?.alignment === "both" ? "justify" : s?.alignment) || "left",
     fontWeight: s?.bold ? "bold" : "normal",
     fontStyle: s?.italic ? "italic" : "normal",
     textTransform: s?.textTransform || "none",
-    textIndent: s?.indentation ? `${s.indentation * INCH_TO_PX}px` : 0, 
+    textIndent: s?.indentation ? `${s.indentation * INCH_TO_PX}px` : 0,
+    marginBottom: s?.lineSpacing ? `${(s.lineSpacing - 1) * 4}px` : "0.125rem",
   });
 
   const activeStyle = useMemo(() => cssStyle(style), [style]);
@@ -183,22 +184,30 @@ const Preview = ({
     switch (type) {
       case "title":
         return (
-          <div className="space-y-4">
+          <div className="text-center">
             <div style={activeStyle as any}>Title Title Title</div>
-            <div style={{ ...contextBodyCss("both") as any, textIndent: `${0.5 * INCH_TO_PX}px` }}>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</div>
+            <div className="text-left" style={{ ...contextBodyCss("both") as any, textIndent: `${0.5 * INCH_TO_PX}px` }}>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</div>
           </div>
         );
       case "heading":
         return (
-          <div className="space-y-4">
+          <div>
             <div style={activeStyle as any}>Heading</div>
             <div style={{ ...contextBodyCss("both") as any, textIndent: `${0.5 * INCH_TO_PX}px` }}>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore.</div>
           </div>
         );
       case "chapter":
         return (
-          <div className="space-y-4 text-center">
-            <div style={activeStyle as any}>Chapter X</div>
+          <div className="text-center">
+            <div style={{ ...activeStyle as any, marginBottom: 0 }}>Chapter 1</div>
+            <div style={{ ...cssStyle(config.titles) as any }}>TITLE TITLE TITLE</div>
+            <div className="text-left" style={{ ...contextBodyCss("both") as any, textIndent: `${0.5 * INCH_TO_PX}px` }}>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore.</div>
+          </div>
+        );
+      case "appendixLetter":
+        return (
+          <div className="text-center">
+            <div style={{ ...activeStyle as any, marginBottom: 0 }}>Appendix X</div>
             <div style={{ ...cssStyle(config.titles) as any }}>TITLE TITLE TITLE</div>
             <div className="text-left" style={{ ...contextBodyCss("both") as any, textIndent: `${0.5 * INCH_TO_PX}px` }}>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore.</div>
           </div>
@@ -290,13 +299,13 @@ const Preview = ({
   );
 };
 
-const Section = ({ id, title, icon, isExpanded, onToggle, children }: { 
-  id: string; 
-  title: string; 
-  icon: string; 
+const Section = ({ id, title, icon, isExpanded, onToggle, children }: {
+  id: string;
+  title: string;
+  icon: string;
   isExpanded: boolean;
   onToggle: () => void;
-  children: React.ReactNode 
+  children: React.ReactNode
 }) => {
   return (
     <div className="mb-2 overflow-hidden rounded-2xl border transition-all duration-300"
@@ -365,7 +374,7 @@ const StyleControls = ({
       <div className="grid grid-cols-2 gap-4">
         <Stepper label="Line Spacing" step={0.1} min={1} value={style.lineSpacing} onChange={(v) => onChange(elementKey, { lineSpacing: v })} />
         {elementKey !== "table" && (
-           <Stepper label="Indentation (in)" step={0.25} value={style.indentation} onChange={(v) => onChange(elementKey, { indentation: v })} />
+          <Stepper label="Indentation (in)" step={0.25} value={style.indentation} onChange={(v) => onChange(elementKey, { indentation: v })} />
         )}
       </div>
 
@@ -440,7 +449,7 @@ export default function FormattingConfigPanel({ config, onChange, citationStyle 
       <Section id="figure" title="Figure" icon="fa-image" isExpanded={expandedSection === "figure"} onToggle={() => setExpandedSection(expandedSection === "figure" ? null : "figure")}>
         <Preview style={config.figure as any} type="figure" title="Figure Assets" config={config} citationStyle={citationStyle} />
         <div className="grid grid-cols-2 gap-4 px-1">
-          <Stepper label="Border Weight (pt)" step={0.5} value={config.figure.borderWeight} onChange={(v) => updateElement("figure", { borderWeight: v })} />
+          <Stepper label="Border Weight (pt)" step={0.25} value={config.figure.borderWeight} onChange={(v) => updateElement("figure", { borderWeight: v })} />
           <Stepper label="Line Spacing" step={0.5} min={1} value={config.figure.spacing} onChange={(v) => updateElement("figure", { spacing: v })} />
         </div>
       </Section>
@@ -455,6 +464,10 @@ export default function FormattingConfigPanel({ config, onChange, citationStyle 
 
       <Section id="tableContinuation" title="Table Continuation" icon="fa-table-columns" isExpanded={expandedSection === "tableContinuation"} onToggle={() => setExpandedSection(expandedSection === "tableContinuation" ? null : "tableContinuation")}>
         <StyleControls elementKey="tableContinuation" label="Table Continuation" config={config} onChange={updateElement} citationStyle={citationStyle} previewType="tableContinuation" />
+      </Section>
+
+      <Section id="appendixLetter" title="Appendix Letter" icon="fa-font" isExpanded={expandedSection === "appendixLetter"} onToggle={() => setExpandedSection(expandedSection === "appendixLetter" ? null : "appendixLetter")}>
+        <StyleControls elementKey="appendixLetter" label="Appendix Letter" config={config} onChange={updateElement} citationStyle={citationStyle} previewType="appendixLetter" />
       </Section>
 
       <Section id="appendixContinuation" title="Appendix Continuation" icon="fa-rotate-right" isExpanded={expandedSection === "appendixContinuation"} onToggle={() => setExpandedSection(expandedSection === "appendixContinuation" ? null : "appendixContinuation")}>

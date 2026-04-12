@@ -403,8 +403,10 @@ function applyPreliminaryBody(p: Element, config: FormattingConfig) {
   writePIndent(p, inchesToTwips(config.body.indentation), 0, 0);
   writePSpacing(p, 0, 0, linesToTwips(config.body.lineSpacing));
   const size = ptsToHalfPts(config.body.fontSize);
-  writePPrRPr(p, config.body.fontFamily, size, false, false);
-  applyRunFormatting(p, config.body.fontFamily, size, null, null);
+  const bold = config.body.bold ?? false;
+  const italic = config.body.italic ?? false;
+  writePPrRPr(p, config.body.fontFamily, size, bold, italic);
+  applyRunFormatting(p, config.body.fontFamily, size, bold, italic);
 }
 
 function applySignatory(p: Element, config: FormattingConfig) {
@@ -1048,17 +1050,20 @@ function formatAbstractTable(tbl: Element, config: FormattingConfig) {
           writePAlignment(p, config.table.alignment);
           writePSpacing(p, 0, 0, linesToTwips(config.table.lineSpacing / 2));
           const size = ptsToHalfPts(config.table.fontSize);
-          writePPrRPr(p, config.table.fontFamily, size, false, false);
-          applyRunFormatting(p, config.table.fontFamily, size, false, false);
+          const bold = config.table.bold ?? false;
+          const italic = config.table.italic ?? false;
+          writePPrRPr(p, config.table.fontFamily, size, bold, italic);
+          applyRunFormatting(p, config.table.fontFamily, size, bold, italic);
         } else if (isCol2) {
           if (isFirstDataRow) uppercaseParagraph(p);
           stripTabRuns(p);
           stripPPr(p);
           writePAlignment(p, config.body.alignment);
           writePIndent(p, 0, 0, 0);
-          writePSpacing(p, 0, 0, linesToTwips(config.body.lineSpacing / 2));
-          writePPrRPr(p, config.body.fontFamily, size, true, false);
-          applyRunFormatting(p, config.body.fontFamily, size, true, false);
+          const bold = config.body.bold ?? true; // Abstract Col 2 titles are usually bold
+          const italic = config.body.italic ?? false;
+          writePPrRPr(p, config.body.fontFamily, size, bold, italic);
+          applyRunFormatting(p, config.body.fontFamily, size, bold, italic);
         }
       }
     });

@@ -132,17 +132,16 @@ export default function App() {
     else setConfigIeee(newConfig);
   };
 
+  const isConfigChanged = JSON.stringify(formattingConfig) !== JSON.stringify(citationStyle === "apa" ? DEFAULT_CONFIG_APA : DEFAULT_CONFIG_IEEE);
+
   const handleResetStyles = () => {
-    const prev = citationStyle === "apa" ? configApa : configIeee;
+    const prev = { ...(citationStyle === "apa" ? configApa : configIeee) };
     const defaults = citationStyle === "apa" ? DEFAULT_CONFIG_APA : DEFAULT_CONFIG_IEEE;
-    
-    // Save snapshot for undo
-    const snapshot = { ...prev };
     
     setFormattingConfig(defaults);
     
     showToast("Styles restored to defaults.", "success", "Undo", () => {
-      setFormattingConfig(snapshot);
+      setFormattingConfig(prev);
       showToast("Restoration undone.");
     });
   };
@@ -175,11 +174,18 @@ export default function App() {
   // ── processing ───────────────────────────────────────────────────────────
   const [processing, setProcessing] = useState(false);
   const [toast, setToast] = useState<ToastMsg | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showToast = useCallback(
     (msg: string, type: "success" | "error" = "success", actionLabel?: string, onAction?: () => void) => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+      
       setToast({ id: Date.now(), msg, type, actionLabel, onAction });
-      setTimeout(() => setToast(null), 5000);
+      
+      toastTimer.current = setTimeout(() => {
+        setToast(null);
+        toastTimer.current = null;
+      }, 5000);
     },
     [],
   );
@@ -822,14 +828,16 @@ export default function App() {
               className="px-6 py-4 border-t flex items-center justify-end gap-3"
               style={{ borderColor: "var(--border)", background: "var(--surface)" }}
             >
-              <button
-                onClick={handleResetStyles}
-                className="rounded-2xl border px-5 py-2.5 text-xs font-bold transition hover:bg-black/5"
-                style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}
-                type="button"
-              >
-                Restore Defaults
-              </button>
+              {isConfigChanged && (
+                <button
+                  onClick={handleResetStyles}
+                  className="rounded-2xl border px-5 py-2.5 text-xs font-bold transition hover:bg-black/5"
+                  style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}
+                  type="button"
+                >
+                  Restore Defaults
+                </button>
+              )}
               <button
                 onClick={() => setStylesModalOpen(false)}
                 className="rounded-2xl px-6 py-2.5 text-xs font-bold text-white transition active:scale-95 shadow-md"

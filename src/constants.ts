@@ -34,6 +34,8 @@ export type TableOptions = {
   fontSize: number;
   lineSpacing: number;
   alignment: "left" | "center" | "right" | "both";
+  bold?: boolean;
+  italic?: boolean;
 };
 
 export type FigureOptions = {
@@ -50,6 +52,7 @@ export type FormattingConfig = {
   tableCaption: ElementStyle;
   figureCaption: ElementStyle;
   tableContinuation: ElementStyle;
+  appendixLetter: ElementStyle;
   appendixContinuation: ElementStyle;
   table: TableOptions;
   figure: FigureOptions;
@@ -112,7 +115,7 @@ export const DEFAULT_CONFIG_IEEE: FormattingConfig = {
   },
   tableContinuation: {
     fontFamily: "Garamond",
-    fontSize: 13,
+    fontSize: 12,
     lineSpacing: 1.0,
     alignment: "left",
     indentation: 0,
@@ -133,8 +136,16 @@ export const DEFAULT_CONFIG_IEEE: FormattingConfig = {
     alignment: "center",
   },
   figure: {
-    borderWeight: 2.0,
+    borderWeight: 2.25,
     spacing: 1.0,
+  },
+  appendixLetter: {
+    fontFamily: "Garamond",
+    fontSize: 14,
+    lineSpacing: 2.0,
+    alignment: "center",
+    indentation: 0,
+    bold: true,
   },
   legends: {
     fontFamily: "Garamond",

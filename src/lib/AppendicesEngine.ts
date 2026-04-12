@@ -428,19 +428,19 @@ function applyAppendixLetter(p: Element, letter: string, config: FormattingConfi
   pPr.appendChild(wElem(p.ownerDocument!, "pageBreakBefore"));
 
   const jc = wElem(p.ownerDocument!, "jc");
-  setWAttr(jc, "val", config.titles.alignment);
+  setWAttr(jc, "val", config.appendixLetter.alignment);
   pPr.appendChild(jc);
 
   const ind = wElem(p.ownerDocument!, "ind");
   setWAttr(ind, "firstLine", "0");
-  setWAttr(ind, "left", String(inchesToTwips(config.titles.indentation)));
+  setWAttr(ind, "left", String(inchesToTwips(config.appendixLetter.indentation)));
   setWAttr(ind, "right", "0");
   pPr.appendChild(ind);
 
   const sp = wElem(p.ownerDocument!, "spacing");
   setWAttr(sp, "before", "0");
   setWAttr(sp, "after", "0");
-  setWAttr(sp, "line", String(linesToTwips(config.titles.lineSpacing)));
+  setWAttr(sp, "line", String(linesToTwips(config.appendixLetter.lineSpacing)));
   setWAttr(sp, "lineRule", "auto");
   setWAttr(sp, "beforeAutospacing", "0");
   setWAttr(sp, "afterAutospacing", "0");
@@ -450,20 +450,20 @@ function applyAppendixLetter(p: Element, letter: string, config: FormattingConfi
   setWAttr(cs, "val", "0");
   pPr.appendChild(cs);
 
-  const size = ptsToHalfPts(config.titles.fontSize);
+  const size = ptsToHalfPts(config.appendixLetter.fontSize);
   writePPrRPr(
     p,
-    config.titles.fontFamily,
+    config.appendixLetter.fontFamily,
     size,
-    config.titles.bold ?? true,
-    config.titles.italic ?? false,
+    config.appendixLetter.bold ?? true,
+    config.appendixLetter.italic ?? false,
   );
   applyRunFormatting(
     p,
-    config.titles.fontFamily,
+    config.appendixLetter.fontFamily,
     size,
-    config.titles.bold ?? true,
-    config.titles.italic ?? false,
+    config.appendixLetter.bold ?? true,
+    config.appendixLetter.italic ?? false,
   );
 }
 
@@ -601,12 +601,14 @@ function applyEmptyParagraph(p: Element, config: FormattingConfig) {
   setWAttr(cs, "val", "1");
   pPr.appendChild(cs);
 
+  const bold = config.body.bold ?? false;
+  const italic = config.body.italic ?? false;
   writePPrRPr(
     p,
     config.body.fontFamily,
     ptsToHalfPts(config.body.fontSize),
-    false,
-    false,
+    bold,
+    italic,
   );
 }
 

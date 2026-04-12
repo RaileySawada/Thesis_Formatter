@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { FormattingConfig } from "../constants";
+import { DEFAULT_CONFIG_APA, DEFAULT_CONFIG_IEEE } from "../constants";
 import FormattingConfigPanel from "./FormattingConfigPanel";
 
 interface Props {
@@ -43,6 +44,8 @@ export default function MobileStylesSheet({
   useEffect(() => {
     if (!open && visible && !closing) handleClose();
   }, [open]);
+
+  const isConfigChanged = JSON.stringify(config) !== JSON.stringify(citationStyle === "apa" ? DEFAULT_CONFIG_APA : DEFAULT_CONFIG_IEEE);
 
   if (!visible) return null;
 
@@ -105,18 +108,20 @@ export default function MobileStylesSheet({
           style={{ borderColor: "var(--border)", background: "var(--surface)" }}
         >
           <div className="flex gap-3">
-            <button
-              onClick={onReset}
-              className="flex-1 rounded-2xl border py-3.5 text-sm font-bold transition active:scale-[0.98]"
-              style={{
-                borderColor: "var(--border)",
-                color: "var(--text-muted)",
-                background: "var(--surface-raised)",
-              }}
-              type="button"
-            >
-              Restore Defaults
-            </button>
+            {isConfigChanged && (
+              <button
+                onClick={onReset}
+                className="flex-1 rounded-2xl border py-3.5 text-sm font-bold transition active:scale-[0.98]"
+                style={{
+                  borderColor: "var(--border)",
+                  color: "var(--text-muted)",
+                  background: "var(--surface-raised)",
+                }}
+                type="button"
+              >
+                Restore Defaults
+              </button>
+            )}
             <button
               onClick={handleClose}
               className="flex-1 rounded-2xl py-3.5 text-sm font-bold transition active:scale-[0.98]"

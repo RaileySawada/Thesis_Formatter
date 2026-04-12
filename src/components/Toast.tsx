@@ -62,7 +62,11 @@ export default function Toast({
 
       {actionLabel && onAction && (
         <button
-          className="ml-4 px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white text-[10px] font-bold uppercase tracking-wider transition-colors active:scale-95 border border-white/10"
+          className="ml-4 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors active:scale-95 shadow-sm"
+          style={{
+            background: "var(--accent)",
+            color: "#ffffff",
+          }}
           onClick={handleAction}
         >
           {actionLabel}
