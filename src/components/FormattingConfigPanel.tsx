@@ -55,18 +55,18 @@ const Stepper = ({ value, onChange, step = 1, min = 0, label }: {
     <div className="flex items-center overflow-hidden rounded-xl border" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
       <button
         type="button"
-        onClick={() => onChange(Number(Math.max(min, value - step).toFixed(2)))}
+        onClick={() => onChange(Number(Math.max(min, Number(value) - Number(step)).toFixed(2)))}
         className="flex h-9 w-9 items-center justify-center transition hover:bg-black/5"
         style={{ borderRight: "1px solid var(--border)", color: "var(--text-secondary)" }}
       >
         <i className="fa-solid fa-minus text-[10px]" />
       </button>
       <div className="flex-1 text-center text-xs font-bold" style={{ color: "var(--text-primary)" }}>
-        {(typeof value === 'number' && !isNaN(value)) ? value.toFixed(step % 1 === 0 ? 0 : 2) : value}
+        {!isNaN(Number(value)) ? Number(value).toFixed(step % 1 === 0 ? 0 : 2) : value}
       </div>
       <button
         type="button"
-        onClick={() => onChange(Number((value + step).toFixed(2)))}
+        onClick={() => onChange(Number((Number(value) + Number(step)).toFixed(2)))}
         className="flex h-9 w-9 items-center justify-center transition hover:bg-black/5"
         style={{ borderLeft: "1px solid var(--border)", color: "var(--text-secondary)" }}
       >

@@ -94,36 +94,54 @@ export default function App() {
   const [citationStyle, setCitationStyle] = useState<CitationStyle>("ieee");
 
   // ── formatting config ────────────────────────────────────────────────────
-  const [configIeee, setConfigIeee] = useState<FormattingConfig>(() => {
-    const saved = localStorage.getItem("thesis_formatting_config_ieee");
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        return DEFAULT_CONFIG_IEEE;
-      }
-    }
-    return DEFAULT_CONFIG_IEEE;
-  });
+  // Version key: bump this whenever defaults change structurally (e.g. new fields, changed defaults)
+  const CONFIG_VERSION = "v3";
 
-  const [configApa, setConfigApa] = useState<FormattingConfig>(() => {
-    const saved = localStorage.getItem("thesis_formatting_config_apa");
-    if (saved) {
+  const loadConfig = (key: string, defaults: FormattingConfig): FormattingConfig => {
+    const saved = localStorage.getItem(key);
+    const savedVersion = localStorage.getItem(key + "_version");
+    if (saved && savedVersion === CONFIG_VERSION) {
       try {
         return JSON.parse(saved);
-      } catch (e) {
-        return DEFAULT_CONFIG_APA;
+      } catch {
+        return defaults;
       }
     }
-    return DEFAULT_CONFIG_APA;
-  });
+    // Version mismatch or no saved config: merge saved values on top of new defaults
+    // so new default fields (like borderWeight: 2.25) take effect
+    if (saved && savedVersion !== CONFIG_VERSION) {
+      try {
+        const parsed = JSON.parse(saved);
+        // Deep merge: defaults take precedence for nested objects, then overlay saved values
+        const merged: FormattingConfig = { ...defaults };
+        for (const k of Object.keys(defaults) as (keyof FormattingConfig)[]) {
+          if (parsed[k] !== undefined && typeof parsed[k] === "object" && typeof (defaults[k] as any) === "object") {
+            (merged as any)[k] = { ...(defaults[k] as any), ...(parsed[k] as any) };
+          } else if (parsed[k] !== undefined) {
+            (merged as any)[k] = parsed[k];
+          }
+        }
+        localStorage.setItem(key + "_version", CONFIG_VERSION);
+        return merged;
+      } catch {
+        return defaults;
+      }
+    }
+    localStorage.setItem(key + "_version", CONFIG_VERSION);
+    return defaults;
+  };
+
+  const [configIeee, setConfigIeee] = useState<FormattingConfig>(() => loadConfig("thesis_formatting_config_ieee", DEFAULT_CONFIG_IEEE));
+  const [configApa, setConfigApa] = useState<FormattingConfig>(() => loadConfig("thesis_formatting_config_apa", DEFAULT_CONFIG_APA));
 
   useEffect(() => {
     localStorage.setItem("thesis_formatting_config_ieee", JSON.stringify(configIeee));
+    localStorage.setItem("thesis_formatting_config_ieee_version", CONFIG_VERSION);
   }, [configIeee]);
 
   useEffect(() => {
     localStorage.setItem("thesis_formatting_config_apa", JSON.stringify(configApa));
+    localStorage.setItem("thesis_formatting_config_apa_version", CONFIG_VERSION);
   }, [configApa]);
 
   const formattingConfig = citationStyle === "apa" ? configApa : configIeee;

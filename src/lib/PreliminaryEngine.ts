@@ -989,7 +989,7 @@ function formatAbstractTable(tbl: Element, config: FormattingConfig) {
   );
 
   let firstDataRowIdx = -1;
-  const size = ptsToHalfPts(config.body.fontSize);
+  const size = ptsToHalfPts(config.table.fontSize);
   for (let i = 0; i < rows.length; i++) {
     const cells = Array.from(rows[i].querySelectorAll("tc")).filter(
       (tc) => tc.namespaceURI === W_NS,
@@ -1032,7 +1032,7 @@ function formatAbstractTable(tbl: Element, config: FormattingConfig) {
           const sp = wElem(p.ownerDocument!, "spacing");
           setWAttr(sp, "before", "0");
           setWAttr(sp, "after", "0");
-          setWAttr(sp, "line", String(linesToTwips(config.body.lineSpacing / 2)));
+          setWAttr(sp, "line", String(linesToTwips(config.table.lineSpacing)));
           setWAttr(sp, "lineRule", "auto");
           setWAttr(sp, "beforeAutospacing", "0");
           setWAttr(sp, "afterAutospacing", "0");
@@ -1047,23 +1047,21 @@ function formatAbstractTable(tbl: Element, config: FormattingConfig) {
         if (isCol1) {
           stripTabRuns(p);
           stripPPr(p);
-          writePAlignment(p, config.table.alignment);
-          writePSpacing(p, 0, 0, linesToTwips(config.table.lineSpacing / 2));
-          const size = ptsToHalfPts(config.table.fontSize);
-          const bold = config.table.bold ?? false;
-          const italic = config.table.italic ?? false;
-          writePPrRPr(p, config.table.fontFamily, size, bold, italic);
-          applyRunFormatting(p, config.table.fontFamily, size, bold, italic);
+          writePAlignment(p, "both");
+          writePSpacing(p, 0, 0, linesToTwips(config.table.lineSpacing));
+          const size = ptsToHalfPts(12);
+          writePPrRPr(p, "Garamond", size, false, false);
+          applyRunFormatting(p, "Garamond", size, false, false);
         } else if (isCol2) {
           if (isFirstDataRow) uppercaseParagraph(p);
           stripTabRuns(p);
           stripPPr(p);
-          writePAlignment(p, config.body.alignment);
+          writePAlignment(p, "both");
+          writePSpacing(p, 0, 0, linesToTwips(config.table.lineSpacing));
           writePIndent(p, 0, 0, 0);
-          const bold = config.body.bold ?? true; // Abstract Col 2 titles are usually bold
-          const italic = config.body.italic ?? false;
-          writePPrRPr(p, config.body.fontFamily, size, bold, italic);
-          applyRunFormatting(p, config.body.fontFamily, size, bold, italic);
+          const size = ptsToHalfPts(12);
+          writePPrRPr(p, "Garamond", size, true, false);
+          applyRunFormatting(p, "Garamond", size, true, false);
         }
       }
     });
