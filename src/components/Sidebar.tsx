@@ -53,7 +53,7 @@ export default function Sidebar({
   return (
     <aside
       id="main-sidebar"
-      className="sticky top-0 hidden lg:flex lg:flex-col w-full max-w-[280px] shrink-0 self-start"
+      className="hidden lg:flex lg:flex-col w-full max-w-[280px] shrink-0"
     >
       {/* Logo */}
       <div className="flex items-center gap-3 pb-1">
@@ -157,13 +157,13 @@ export default function Sidebar({
                 style={
                   active
                     ? {
-                        borderColor: "var(--accent)",
-                        background: "var(--accent-subtle)",
-                      }
+                      borderColor: "var(--accent)",
+                      background: "var(--accent-subtle)",
+                    }
                     : {
-                        borderColor: "var(--border)",
-                        background: "var(--surface-raised)",
-                      }
+                      borderColor: "var(--border)",
+                      background: "var(--surface-raised)",
+                    }
                 }
               >
                 <span
@@ -171,13 +171,13 @@ export default function Sidebar({
                   style={
                     active
                       ? {
-                          background: "var(--accent-subtle-strong)",
-                          color: "var(--accent)",
-                        }
+                        background: "var(--accent-subtle-strong)",
+                        color: "var(--accent)",
+                      }
                       : {
-                          background: "var(--border)",
-                          color: "var(--text-secondary)",
-                        }
+                        background: "var(--border)",
+                        color: "var(--text-secondary)",
+                      }
                   }
                 >
                   <i className={`fa-solid ${cs.icon}`} />
@@ -276,9 +276,9 @@ export default function Sidebar({
                 style={
                   isSelected
                     ? {
-                        border: "2px solid var(--accent)",
-                        background: "var(--accent-subtle)",
-                      }
+                      border: "2px solid var(--accent)",
+                      background: "var(--accent-subtle)",
+                    }
                     : { border: "1px solid var(--border)" }
                 }
                 onClick={() => toggleSection(sec.value)}
@@ -288,13 +288,13 @@ export default function Sidebar({
                   style={
                     isSelected
                       ? {
-                          background: "var(--accent-subtle-strong)",
-                          color: "var(--accent)",
-                        }
+                        background: "var(--accent-subtle-strong)",
+                        color: "var(--accent)",
+                      }
                       : {
-                          background: "var(--surface-raised)",
-                          color: "var(--text-muted)",
-                        }
+                        background: "var(--surface-raised)",
+                        color: "var(--text-muted)",
+                      }
                   }
                 >
                   <i className={`fa-solid ${sec.icon} text-xs`} />
