@@ -17,6 +17,16 @@ const FONT_FAMILIES = [
   "Verdana",
 ];
 
+const FONT_STACKS: Record<string, string> = {
+  "Garamond": "'Garamond', 'EB Garamond', serif",
+  "Arial": "'Arial', 'Arimo', sans-serif",
+  "Times New Roman": "'Times New Roman', 'Tinos', serif",
+  "Calibri": "'Calibri', 'Source Sans 3', sans-serif",
+  "Courier New": "'Courier New', 'Cousine', monospace",
+  "Georgia": "'Georgia', serif",
+  "Verdana": "'Verdana', 'Inter', sans-serif",
+};
+
 const ALIGNMENTS = [
   { value: "left", icon: "fa-align-left" },
   { value: "center", icon: "fa-align-center" },
@@ -32,7 +42,7 @@ const PT_TO_PX_SCALE = 1.333 * 0.8;
 const INCH_TO_PX = 72 * PT_TO_PX_SCALE;
 
 const contextBodyCss = (alignment: any = "both") => ({
-  fontFamily: "Garamond",
+  fontFamily: FONT_STACKS["Garamond"],
   fontSize: `${12 * PT_TO_PX_SCALE}px`,
   lineHeight: 1.5,
   textAlign: alignment === "both" ? "justify" : alignment,
@@ -128,7 +138,7 @@ const MultiToggle = ({ items }: { items: { label: string; value: boolean; onChan
 const PreviewTable = ({ style }: { style: any }) => (
   <div className="overflow-hidden rounded-md border" style={{ borderColor: "#cbd5e1" }}>
     <table className="w-full border-collapse bg-white" style={{
-      fontFamily: style?.fontFamily || "inherit",
+      fontFamily: FONT_STACKS[style?.fontFamily] || style?.fontFamily || "inherit",
       fontSize: `${(style?.fontSize || 10) * PT_TO_PX_SCALE}px`,
       lineHeight: style?.lineSpacing || 1.0,
       textAlign: (style?.alignment === "both" ? "justify" : style?.alignment) || "center",
@@ -167,7 +177,7 @@ const Preview = ({
   citationStyle: "ieee" | "apa";
 }) => {
   const cssStyle = (s: any) => ({
-    fontFamily: s?.fontFamily || "inherit",
+    fontFamily: FONT_STACKS[s?.fontFamily] || s?.fontFamily || "inherit",
     fontSize: `${(s?.fontSize || 12) * PT_TO_PX_SCALE}px`,
     lineHeight: s?.lineSpacing || 1.5,
     textAlign: (s?.alignment === "both" ? "justify" : s?.alignment) || "left",
