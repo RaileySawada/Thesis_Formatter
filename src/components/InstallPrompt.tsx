@@ -57,11 +57,27 @@ export default function InstallPrompt({ isDark }: Props) {
   const [installed, setInstalled] = useState(false);
   const [logoError, setLogoError] = useState(false);
 
-  // Register service worker — errors swallowed so the console stays clean
+  // Register service worker in production only.
+  // In dev, aggressively remove old SW/caches to prevent stale chunk mismatch.
   useEffect(() => {
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    if (!("serviceWorker" in navigator)) return;
+
+    if (import.meta.env.DEV) {
+      navigator.serviceWorker
+        .getRegistrations()
+        .then((regs) => Promise.all(regs.map((r) => r.unregister())))
+        .catch(() => {});
+
+      if ("caches" in window) {
+        caches
+          .keys()
+          .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+          .catch(() => {});
+      }
+      return;
     }
+
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
   }, []);
 
   /**

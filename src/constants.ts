@@ -17,6 +17,8 @@ export interface ToastMsg {
 }
 
 export type CitationStyle = "ieee" | "apa";
+export type FormattingStandard = "ccc" | "conference";
+export type ConferenceFormat = "acm" | "pubform";
 
 export type ElementStyle = {
   fontFamily: string;
@@ -177,5 +179,51 @@ export const CITATION_STYLES: {
       label: "APA 7th",
       sub: "Author-date (Smith, 2024)",
       icon: "fa-user-pen",
+    },
+  ];
+
+export const FORMATTING_STANDARDS: {
+  value: FormattingStandard;
+  label: string;
+  sub: string;
+  icon: string;
+}[] = [
+    {
+      value: "ccc",
+      label: "CCC",
+      sub: "CCC formatting guidelines",
+      icon: "fa-building-columns",
+    },
+    {
+      value: "conference",
+      label: "Conference",
+      sub: "Conference-specific formatting rules",
+      icon: "fa-users-rectangle",
+    },
+  ];
+
+export const CONFERENCE_FORMATS: {
+  value: ConferenceFormat;
+  label: string;
+  sub: string;
+  icon: string;
+  href: string;
+  download: string;
+}[] = [
+    {
+      value: "acm",
+      label: "ACM Conference",
+      sub: "ACM conference formatting file",
+      icon: "fa-file-lines",
+      href: "/conference/acm_formatting_guidelines.docx",
+      download: "acm_conference_format.docx",
+    },
+    {
+      value: "pubform",
+      label: "Publication Form",
+      sub: "Publication formatting file",
+      icon: "fa-file-signature",
+      href: "/conference/publication_formatting_guidelines.docx",
+      download: "publication_form_format.docx",
     },
   ];

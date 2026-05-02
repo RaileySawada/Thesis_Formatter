@@ -1,9 +1,21 @@
+import type { FormattingStandard } from "../constants";
+
+type AiRunStatus = "not-used" | "running" | "success" | "failed";
+
 interface Props {
+  formattingStandard: FormattingStandard;
   selectedSections: string[];
   sectionLabels: Record<string, string>;
   file: File | null;
   enabledRules: string[];
   totalRules: number;
+  processing: boolean;
+  activeElapsedMs: number;
+  lastRunMs: number | null;
+  aiAssistEnabled: boolean;
+  aiStatus: AiRunStatus;
+  lastAiMs: number | null;
+  aiError: string | null;
 }
 
 function StepIcon({
@@ -40,17 +52,32 @@ function stepClass(done: boolean, active: boolean, inactive: boolean) {
   return cls;
 }
 
+function formatDuration(ms: number | null): string {
+  if (ms === null) return "--";
+  if (ms >= 1000) return `${(ms / 1000).toFixed(2)}s`;
+  return `${Math.max(0, Math.round(ms))}ms`;
+}
+
 export default function StatusPanel({
+  formattingStandard,
   selectedSections,
   sectionLabels,
   file,
   enabledRules,
   totalRules,
+  processing,
+  activeElapsedMs,
+  lastRunMs,
+  aiAssistEnabled,
+  aiStatus,
+  lastAiMs,
+  aiError,
 }: Props) {
-  const sectionDone = selectedSections.length > 0;
+  const sectionDone =
+    formattingStandard === "conference" ? true : selectedSections.length > 0;
   const fileDone = !!file;
   const activeRules = enabledRules.length;
-  const rulesDone = activeRules > 0;
+  const rulesDone = formattingStandard === "conference" ? true : activeRules > 0;
   const allDone = sectionDone && fileDone && rulesDone;
 
   const headline = allDone
@@ -62,8 +89,12 @@ export default function StatusPanel({
   const subtext = allDone
     ? "All set — click Apply Formatting below to process your manuscript."
     : fileDone
-      ? "Check that all steps above are complete."
-      : "Select sections on the left, then upload your manuscript.";
+      ? formattingStandard === "conference"
+        ? "Conference rule is active. Upload and apply formatting."
+        : "Check that all steps above are complete."
+      : formattingStandard === "conference"
+        ? "Choose a conference rule, then upload your manuscript."
+        : "Select sections on the left, then upload your manuscript.";
 
   return (
     <div
@@ -85,6 +116,37 @@ export default function StatusPanel({
         {subtext}
       </p>
 
+      <div
+        className="mt-4 rounded-2xl border px-3 py-2"
+        style={{
+          borderColor: "rgba(255,255,255,0.18)",
+          background: "rgba(255,255,255,0.06)",
+        }}
+      >
+        <p className="text-[11px] font-semibold">
+          {processing
+            ? `Run Time: ${formatDuration(activeElapsedMs)}`
+            : `Last Run: ${formatDuration(lastRunMs)}`}
+        </p>
+        <p
+          className="mt-1 text-[10px]"
+          style={{ color: "rgba(255,255,255,0.68)" }}
+        >
+          {!aiAssistEnabled
+            ? "AI Check: Off (local rule-based formatter)"
+            : aiStatus === "running"
+              ? "AI Check: Running..."
+              : aiStatus === "success"
+                ? `AI Check: Success in ${formatDuration(lastAiMs)}`
+                : `AI Check: Failed${lastAiMs !== null ? ` after ${formatDuration(lastAiMs)}` : ""}. Local fallback used.`}
+        </p>
+        {aiError && aiStatus === "failed" && (
+          <p className="mt-1 text-[10px]" style={{ color: "#fecaca" }}>
+            {aiError}
+          </p>
+        )}
+      </div>
+
       <div className="mt-5 space-y-2.5 flex-1">
         {/* Step 1: Section */}
         <div
@@ -104,9 +166,11 @@ export default function StatusPanel({
                   : "rgba(255,255,255,0.5)",
               }}
             >
-              {sectionDone
-                ? selectedSections.map((v) => sectionLabels[v] ?? v).join(", ")
-                : "Choose a scope in the sidebar"}
+              {formattingStandard === "conference"
+                ? "Conference mode uses full-document formatting."
+                : sectionDone
+                  ? selectedSections.map((v) => sectionLabels[v] ?? v).join(", ")
+                  : "Choose a scope in the sidebar"}
             </p>
           </div>
         </div>
@@ -152,9 +216,11 @@ export default function StatusPanel({
                   : "rgba(255,255,255,0.5)",
               }}
             >
-              {rulesDone
-                ? `${activeRules} of ${totalRules} rules active`
-                : "No rules enabled"}
+              {formattingStandard === "conference"
+                ? "Conference rule set selected"
+                : rulesDone
+                  ? `${activeRules} of ${totalRules} rules active`
+                  : "No rules enabled"}
             </p>
           </div>
         </div>

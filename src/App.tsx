@@ -1,10 +1,22 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { formatDocx } from "./lib/FormatterEngine";
 import { formatDocxApa } from "./lib/ApaFormatterEngine";
+import { formatDocxConference } from "./lib/ConferenceFormatterEngine";
 import { formatPreliminary } from "./lib/PreliminaryEngine";
 import { formatAppendices } from "./lib/AppendicesEngine";
-import { RULES_DEF, DEFAULT_CONFIG_IEEE, DEFAULT_CONFIG_APA } from "./constants";
-import type { ToastMsg, CitationStyle, FormattingConfig } from "./constants";
+import {
+  RULES_DEF,
+  DEFAULT_CONFIG_IEEE,
+  DEFAULT_CONFIG_APA,
+  CONFERENCE_FORMATS,
+} from "./constants";
+import type {
+  ToastMsg,
+  CitationStyle,
+  FormattingConfig,
+  FormattingStandard,
+  ConferenceFormat,
+} from "./constants";
 import Sidebar from "./components/Sidebar";
 import FormattingConfigPanel from "./components/FormattingConfigPanel";
 import UploadZone from "./components/UploadZone";
@@ -13,6 +25,20 @@ import MobileSheet from "./components/MobileSheet";
 import PreviewModal from "./components/PreviewModal";
 import MobileStylesSheet from "./components/MobileStylesSheet";
 import Toast from "./components/Toast";
+import { requestPollinations } from "./lib/pollinationsClient";
+
+type AiRunStatus = "not-used" | "running" | "success" | "failed";
+
+const AI_ASSIST_ENABLED = ["true", "1", "yes", "on"].includes(
+  String(import.meta.env.VITE_ENABLE_AI_ASSIST ?? "")
+    .trim()
+    .toLowerCase(),
+);
+
+function formatDuration(ms: number): string {
+  if (ms >= 1000) return `${(ms / 1000).toFixed(2)}s`;
+  return `${Math.max(0, Math.round(ms))}ms`;
+}
 
 // PWA install prompt is handled entirely by InstallPrompt.tsx
 
@@ -91,7 +117,26 @@ export default function App() {
   }, []);
 
   // ── components state ───────────────────────────────────────────────────
+  const [formattingStandard, setFormattingStandard] =
+    useState<FormattingStandard>(() => {
+      const saved = localStorage.getItem("thesis_formatting_standard");
+      return saved === "conference" ? "conference" : "ccc";
+    });
+  const [conferenceFormat, setConferenceFormat] = useState<ConferenceFormat>(
+    () => {
+      const saved = localStorage.getItem("thesis_conference_format");
+      return saved === "pubform" ? "pubform" : "acm";
+    },
+  );
   const [citationStyle, setCitationStyle] = useState<CitationStyle>("ieee");
+
+  useEffect(() => {
+    localStorage.setItem("thesis_formatting_standard", formattingStandard);
+  }, [formattingStandard]);
+
+  useEffect(() => {
+    localStorage.setItem("thesis_conference_format", conferenceFormat);
+  }, [conferenceFormat]);
 
   // ── formatting config ────────────────────────────────────────────────────
   // Version key: bump this whenever defaults change structurally (e.g. new fields, changed defaults)
@@ -166,7 +211,7 @@ export default function App() {
 
   // ── file ─────────────────────────────────────────────────────────────────
   const [file, setFile] = useState<File | null>(null);
-  const [rulesOpen, setRulesOpen] = useState(true);
+  const [rulesOpen, setRulesOpen] = useState(false);
   const [stylesModalOpen, setStylesModalOpen] = useState(false);
 
   // ── modals ───────────────────────────────────────────────────────────────
@@ -189,8 +234,21 @@ export default function App() {
     return () => document.removeEventListener("mousedown", handler);
   }, [templateDropdownOpen]);
 
+  useEffect(() => {
+    if (formattingStandard === "conference") {
+      setStylesModalOpen(false);
+      setPreviewOpen(false);
+      setRulesOpen(false);
+    }
+  }, [formattingStandard]);
+
   // ── processing ───────────────────────────────────────────────────────────
   const [processing, setProcessing] = useState(false);
+  const [activeElapsedMs, setActiveElapsedMs] = useState(0);
+  const [lastRunMs, setLastRunMs] = useState<number | null>(null);
+  const [aiStatus, setAiStatus] = useState<AiRunStatus>("not-used");
+  const [lastAiMs, setLastAiMs] = useState<number | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastMsg | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -208,10 +266,68 @@ export default function App() {
     [],
   );
 
+  useEffect(() => {
+    if (!processing) return;
+    const startedAt = performance.now();
+    const tick = window.setInterval(() => {
+      setActiveElapsedMs(Math.round(performance.now() - startedAt));
+    }, 120);
+    return () => window.clearInterval(tick);
+  }, [processing]);
+
   const handleApply = useCallback(async () => {
     if (!file || !jsZipReady || processing) return;
+    const startedAt = performance.now();
     setProcessing(true);
+    setActiveElapsedMs(0);
+    setLastAiMs(null);
+    setAiError(null);
+
+    let runAiStatus: AiRunStatus = AI_ASSIST_ENABLED ? "running" : "not-used";
+    let runAiMs: number | null = null;
+    let runAiRequestedModel: string | null = null;
+    let runAiResponseModel: string | null = null;
+    let runAiEndpoint: string | null = null;
+    setAiStatus(runAiStatus);
+
     try {
+      if (AI_ASSIST_ENABLED) {
+        const aiStartedAt = performance.now();
+        try {
+          const aiResult = await requestPollinations({
+            prompt:
+              "Reply only with READY. This is a health check for a formatter workflow.",
+            temperature: 0,
+            maxTokens: 8,
+          });
+          runAiRequestedModel = aiResult.meta?.requestedModel ?? null;
+          runAiResponseModel =
+            aiResult.meta?.responseModel ??
+            (typeof aiResult.data === "object" &&
+            aiResult.data !== null &&
+            "model" in aiResult.data
+              ? ((aiResult.data as { model?: string }).model ?? null)
+              : null);
+          runAiEndpoint = aiResult.meta?.endpoint ?? null;
+          console.info("[AI Assist] Pollinations health check success", {
+            requestedModel: runAiRequestedModel,
+            responseModel: runAiResponseModel,
+            endpoint: runAiEndpoint,
+          });
+          runAiStatus = "success";
+        } catch (aiErr) {
+          runAiStatus = "failed";
+          const aiMessage =
+            aiErr instanceof Error ? aiErr.message : String(aiErr);
+          setAiError(aiMessage);
+          console.error("[AI Assist] Pollinations health check failed:", aiErr);
+        } finally {
+          runAiMs = Math.round(performance.now() - aiStartedAt);
+          setLastAiMs(runAiMs);
+          setAiStatus(runAiStatus);
+        }
+      }
+
       const runPreliminary = selectedSections.includes("preliminary");
       const runChapters = selectedSections.includes("chapters");
       const runAppendices = selectedSections.includes("appendices");
@@ -219,35 +335,41 @@ export default function App() {
       let currentBuffer = await file.arrayBuffer();
       let blob: Blob | null = null;
 
-      if (runPreliminary) {
-        blob = await formatPreliminary(currentBuffer, {
-          rules: enabledRules,
-          config: formattingConfig,
+      if (formattingStandard === "conference") {
+        blob = await formatDocxConference(currentBuffer, {
+          format: conferenceFormat,
         });
-        currentBuffer = await blob.arrayBuffer();
-      }
-      if (runChapters) {
-        if (citationStyle === "apa") {
-          blob = await formatDocxApa(currentBuffer, {
-            sections: selectedSections,
+      } else {
+        if (runPreliminary) {
+          blob = await formatPreliminary(currentBuffer, {
             rules: enabledRules,
             config: formattingConfig,
           });
-        } else {
-          blob = await formatDocx(currentBuffer, {
-            sections: selectedSections,
+          currentBuffer = await blob.arrayBuffer();
+        }
+        if (runChapters) {
+          if (citationStyle === "apa") {
+            blob = await formatDocxApa(currentBuffer, {
+              sections: selectedSections,
+              rules: enabledRules,
+              config: formattingConfig,
+            });
+          } else {
+            blob = await formatDocx(currentBuffer, {
+              sections: selectedSections,
+              rules: enabledRules,
+              citationStyle,
+              config: formattingConfig,
+            });
+          }
+          currentBuffer = await blob.arrayBuffer();
+        }
+        if (runAppendices) {
+          blob = await formatAppendices(currentBuffer, {
             rules: enabledRules,
-            citationStyle,
             config: formattingConfig,
           });
         }
-        currentBuffer = await blob.arrayBuffer();
-      }
-      if (runAppendices) {
-        blob = await formatAppendices(currentBuffer, {
-          rules: enabledRules,
-          config: formattingConfig,
-        });
       }
 
       const docxMime =
@@ -262,8 +384,51 @@ export default function App() {
       a.download = safeName;
       a.click();
       URL.revokeObjectURL(url);
-      showToast("Your manuscript has been formatted. Download started.");
+
+      const totalMs = Math.round(performance.now() - startedAt);
+      setLastRunMs(totalMs);
+
+      const aiSummary =
+        runAiStatus === "success" && runAiMs !== null
+          ? ` AI check: success in ${formatDuration(runAiMs)}.`
+          : runAiStatus === "failed"
+            ? " AI check: failed. Local formatting fallback used."
+            : " AI check: off (local rule-based formatting).";
+
+      console.info("[Formatter] Completed", {
+        file: file.name,
+        formattingStandard,
+        conferenceFormat,
+        citationStyle,
+        durationMs: totalMs,
+        aiStatus: runAiStatus,
+        aiDurationMs: runAiMs,
+        aiRequestedModel: runAiRequestedModel,
+        aiResponseModel: runAiResponseModel,
+        aiEndpoint: runAiEndpoint,
+      });
+
+      showToast(
+        `Formatted in ${formatDuration(totalMs)}.${aiSummary} Download started.`,
+      );
     } catch (err) {
+      const totalMs = Math.round(performance.now() - startedAt);
+      setLastRunMs(totalMs);
+
+      console.error("[Formatter] Apply failed", {
+        error: err,
+        file: file.name,
+        formattingStandard,
+        conferenceFormat,
+        citationStyle,
+        durationMs: totalMs,
+        aiStatus: runAiStatus,
+        aiDurationMs: runAiMs,
+        aiRequestedModel: runAiRequestedModel,
+        aiResponseModel: runAiResponseModel,
+        aiEndpoint: runAiEndpoint,
+      });
+
       showToast(err instanceof Error ? err.message : String(err), "error");
     } finally {
       setProcessing(false);
@@ -274,6 +439,8 @@ export default function App() {
     processing,
     selectedSections,
     enabledRules,
+    formattingStandard,
+    conferenceFormat,
     citationStyle,
     showToast,
     formattingConfig,
@@ -289,6 +456,24 @@ export default function App() {
     chapters: "fa-book-open",
     appendices: "fa-paperclip",
   };
+  const cccFormatFiles = [
+    {
+      href: "/template/manuscript_template(IEEE).docx",
+      download: "ieee_format_file.docx",
+      label: "IEEE",
+      sub: "Numbered references [1]",
+      icon: "fa-hashtag",
+    },
+    {
+      href: "/template/manuscript_template(APA 7th Edition).docx",
+      download: "apa_7th_format_file.docx",
+      label: "APA 7th Edition",
+      sub: "Author-date (Smith, 2024)",
+      icon: "fa-user-pen",
+    },
+  ];
+  const availableFormatFiles =
+    formattingStandard === "conference" ? CONFERENCE_FORMATS : cccFormatFiles;
 
   const theme = isDark ? "dark" : "light";
 
@@ -391,8 +576,12 @@ export default function App() {
             toggleRule={toggleRule}
             rulesOpen={rulesOpen}
             setRulesOpen={setRulesOpen}
+            formattingStandard={formattingStandard}
+            setFormattingStandard={setFormattingStandard}
             citationStyle={citationStyle}
             setCitationStyle={setCitationStyle}
+            conferenceFormat={conferenceFormat}
+            setConferenceFormat={setConferenceFormat}
           />
 
           <main className="min-w-0 flex-1 space-y-5">
@@ -414,8 +603,9 @@ export default function App() {
                     className="text-sm leading-7"
                     style={{ color: "var(--text-soft)" }}
                   >
-                    Upload your manuscript and apply formatting rules for
-                    chapters, references, figures, tables, and captions.
+                    {formattingStandard === "conference"
+                      ? "Upload your manuscript and apply the selected conference formatting rule set to the full document."
+                      : "Upload your manuscript and apply formatting rules for chapters, references, figures, tables, and captions."}
                   </p>
                 </div>
                 <div
@@ -433,7 +623,7 @@ export default function App() {
                       }}
                     >
                       <i className="fa-solid fa-file-arrow-down text-xs" />
-                      Download Template
+                      Download Format Files
                       <i
                         className={`fa-solid fa-chevron-down text-[9px] transition-transform duration-200${templateDropdownOpen ? " rotate-180" : ""}`}
                       />
@@ -448,108 +638,84 @@ export default function App() {
                           zIndex: 9999,
                         }}
                       >
-                        <a
-                          href="/template/manuscript_template(IEEE).docx"
-                          download="manuscript_template(IEEE).docx"
-                          onClick={() => setTemplateDropdownOpen(false)}
-                          className="template-dropdown-item flex items-center gap-3 px-4 py-3 text-xs font-semibold transition-colors"
-                          style={{ color: "var(--text-primary)" }}
-                        >
-                          <span
-                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl"
-                            style={{
-                              background: "var(--accent-subtle-strong)",
-                            }}
-                          >
-                            <i
-                              className="fa-solid fa-hashtag text-[11px]"
-                              style={{ color: "var(--accent)" }}
-                            />
-                          </span>
-                          <span className="flex-1">
-                            <span
-                              className="block font-bold"
+                        {availableFormatFiles.map((formatFile, idx) => (
+                          <div key={formatFile.href}>
+                            <a
+                              href={formatFile.href}
+                              download={formatFile.download}
+                              onClick={() => setTemplateDropdownOpen(false)}
+                              className="template-dropdown-item flex items-center gap-3 px-4 py-3 text-xs font-semibold transition-colors"
                               style={{ color: "var(--text-primary)" }}
                             >
-                              IEEE
-                            </span>
-                            <span
-                              className="block text-[10px]"
-                              style={{ color: "var(--text-soft)" }}
-                            >
-                              Numbered references [1]
-                            </span>
-                          </span>
-                          <i
-                            className="fa-solid fa-arrow-down text-[10px]"
-                            style={{ color: "var(--text-muted)" }}
-                          />
-                        </a>
-                        <div
-                          style={{ height: "1px", background: "var(--border)" }}
-                        />
-                        <a
-                          href="/template/manuscript_template(APA 7th Edition).docx"
-                          download="manuscript_template(APA 7th Edition).docx"
-                          onClick={() => setTemplateDropdownOpen(false)}
-                          className="template-dropdown-item flex items-center gap-3 px-4 py-3 text-xs font-semibold transition-colors"
-                          style={{ color: "var(--text-primary)" }}
-                        >
-                          <span
-                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl"
-                            style={{
-                              background: "var(--accent-subtle-strong)",
-                            }}
-                          >
-                            <i
-                              className="fa-solid fa-user-pen text-[11px]"
-                              style={{ color: "var(--accent)" }}
-                            />
-                          </span>
-                          <span className="flex-1">
-                            <span
-                              className="block font-bold"
-                              style={{ color: "var(--text-primary)" }}
-                            >
-                              APA 7th Edition
-                            </span>
-                            <span
-                              className="block text-[10px]"
-                              style={{ color: "var(--text-soft)" }}
-                            >
-                              Author-date (Smith, 2024)
-                            </span>
-                          </span>
-                          <i
-                            className="fa-solid fa-arrow-down text-[10px]"
-                            style={{ color: "var(--text-muted)" }}
-                          />
-                        </a>
+                              <span
+                                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl"
+                                style={{
+                                  background: "var(--accent-subtle-strong)",
+                                }}
+                              >
+                                <i
+                                  className={`fa-solid ${formatFile.icon} text-[11px]`}
+                                  style={{ color: "var(--accent)" }}
+                                />
+                              </span>
+                              <span className="flex-1">
+                                <span
+                                  className="block font-bold"
+                                  style={{ color: "var(--text-primary)" }}
+                                >
+                                  {formatFile.label}
+                                </span>
+                                <span
+                                  className="block text-[10px]"
+                                  style={{ color: "var(--text-soft)" }}
+                                >
+                                  {formatFile.sub}
+                                </span>
+                              </span>
+                              <i
+                                className="fa-solid fa-arrow-down text-[10px]"
+                                style={{ color: "var(--text-muted)" }}
+                              />
+                            </a>
+                            {idx < availableFormatFiles.length - 1 && (
+                              <div
+                                style={{
+                                  height: "1px",
+                                  background: "var(--border)",
+                                }}
+                              />
+                            )}
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
-                  <button
-                    onClick={() => setStylesModalOpen(true)}
-                    className="inline-flex items-center gap-1.5 rounded-2xl border px-4 py-2.5 text-xs font-semibold transition hover:opacity-80"
-                    style={{
-                      borderColor: "var(--border)",
-                      color: "var(--accent)",
-                      background: "var(--accent-subtle)",
-                    }}
-                  >
-                    <i className="fa-solid fa-wand-magic-sparkles text-xs" /> Formatting Styles
-                  </button>
-                  <button
-                    onClick={() => setPreviewOpen(true)}
-                    className="inline-flex items-center gap-1.5 rounded-2xl border px-4 py-2.5 text-xs font-semibold transition hover:opacity-80"
-                    style={{
-                      borderColor: "var(--border)",
-                      color: "var(--text-soft)",
-                      background: "var(--surface-raised)",
-                    }}
-                  >
-                    <i className="fa-solid fa-eye text-xs" /> Preview Rules
-                  </button>
+                  {formattingStandard === "ccc" && (
+                    <>
+                      <button
+                        onClick={() => setStylesModalOpen(true)}
+                        className="inline-flex items-center gap-1.5 rounded-2xl border px-4 py-2.5 text-xs font-semibold transition hover:opacity-80"
+                        style={{
+                          borderColor: "var(--border)",
+                          color: "var(--accent)",
+                          background: "var(--accent-subtle)",
+                        }}
+                      >
+                        <i className="fa-solid fa-wand-magic-sparkles text-xs" /> Formatting Styles
+                      </button>
+                      <button
+                        onClick={() => setPreviewOpen(true)}
+                        className="inline-flex items-center gap-1.5 rounded-2xl border px-4 py-2.5 text-xs font-semibold transition hover:opacity-80"
+                        style={{
+                          borderColor: "var(--border)",
+                          color: "var(--text-soft)",
+                          background: "var(--surface-raised)",
+                        }}
+                      >
+                        <i className="fa-solid fa-eye text-xs" /> Preview Rules
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -625,7 +791,7 @@ export default function App() {
                           d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
                         />
                       </svg>
-                      Processing…
+                      Processing... {formatDuration(activeElapsedMs)}
                     </span>
                   ) : (
                     <span>
@@ -660,7 +826,7 @@ export default function App() {
                   className="mt-1.5 text-sm"
                   style={{ color: "var(--text-soft)" }}
                 >
-                  Normalizes document sections per the master template.
+                  Normalizes document sections based on the selected formatting rule.
                 </p>
                 <div className="mt-4 space-y-2.5">
                   {[
@@ -746,11 +912,19 @@ export default function App() {
               </div>
 
               <StatusPanel
+                formattingStandard={formattingStandard}
                 selectedSections={selectedSections}
                 sectionLabels={sectionLabels}
                 file={file}
                 enabledRules={enabledRules}
                 totalRules={RULES_DEF.length}
+                processing={processing}
+                activeElapsedMs={activeElapsedMs}
+                lastRunMs={lastRunMs}
+                aiAssistEnabled={AI_ASSIST_ENABLED}
+                aiStatus={aiStatus}
+                lastAiMs={lastAiMs}
+                aiError={aiError}
               />
             </div>
 
@@ -777,10 +951,16 @@ export default function App() {
         toggleSection={toggleSection}
         enabledRules={enabledRules}
         toggleRule={toggleRule}
+        rulesOpen={rulesOpen}
+        setRulesOpen={setRulesOpen}
         sectionLabels={sectionLabels}
         sectionIcons={sectionIcons}
+        formattingStandard={formattingStandard}
+        setFormattingStandard={setFormattingStandard}
         citationStyle={citationStyle}
         setCitationStyle={setCitationStyle}
+        conferenceFormat={conferenceFormat}
+        setConferenceFormat={setConferenceFormat}
         onOpenStyles={() => setStylesModalOpen(true)}
         onOpenPreview={() => setPreviewOpen(true)}
       />
@@ -900,3 +1080,4 @@ export default function App() {
     </div>
   );
 }
+

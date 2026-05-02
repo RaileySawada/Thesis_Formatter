@@ -92,7 +92,7 @@ export function PreviewModal({ open, onClose }: PreviewProps) {
                 className="text-[10px] font-bold uppercase tracking-[0.2em]"
                 style={{ color: "var(--accent)" }}
               >
-                <i className="fa-solid fa-scroll mr-1" /> Template Rules
+                <i className="fa-solid fa-scroll mr-1" /> Formatting Rules
               </p>
               <h2
                 className="text-xl font-bold mt-0.5"
