@@ -66,6 +66,12 @@ export default function SplashScreen({ onFinish }: Props) {
           50% { transform: translate3d(14px, -10px, 0); opacity: 0.84; }
         }
 
+        @media (prefers-color-scheme: light) {
+          .ef-splash__icon {
+            filter: drop-shadow(0 0 8px rgba(25, 42, 86, 0.4)) brightness(0) saturate(100%) invert(12%) sepia(85%) saturate(1000%) hue-rotate(200deg);
+          }
+        }
+
         .ef-splash {
           position: fixed;
           inset: 0;
@@ -334,7 +340,9 @@ export default function SplashScreen({ onFinish }: Props) {
             </h1>
           </div>
 
-          <p className="ef-splash__subline">City College of Calamba · OVPREPQA</p>
+          <p className="ef-splash__subline">
+            City College of Calamba · OVPREPQA
+          </p>
           <div className="ef-splash__progress" aria-hidden="true">
             <div className="ef-splash__progress-fill" />
           </div>
