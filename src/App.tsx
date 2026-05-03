@@ -130,6 +130,17 @@ function useJSZip() {
 
 import InstallPrompt from "./components/InstallPrompt";
 
+function isInstalledPwa(): boolean {
+  if (typeof window === "undefined") return false;
+
+  return (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    window.matchMedia("(display-mode: fullscreen)").matches ||
+    ("standalone" in window.navigator &&
+      (window.navigator as { standalone?: boolean }).standalone === true)
+  );
+}
+
 // ── Main App ──────────────────────────────────────────────────────────────
 export default function App() {
   const jsZipReady = useJSZip();
@@ -138,6 +149,12 @@ export default function App() {
   const [isDark, setIsDark] = useState(() => {
     return (localStorage.getItem("thesis_theme") ?? "light") === "dark";
   });
+
+  const [showSplash, setShowSplash] = useState(() => isInstalledPwa());
+
+  const handleSplashFinish = useCallback(() => {
+    setShowSplash(false);
+  }, []);
 
   useEffect(() => {
     const theme = isDark ? "dark" : "light";
@@ -681,6 +698,7 @@ export default function App() {
       className="relative min-h-screen overflow-x-hidden transition-colors duration-300"
       style={{ background: "var(--bg-page)" }}
     >
+      {showSplash && <SplashScreen onFinish={handleSplashFinish} />}
       {/* Blobs */}
       <div
         className="pointer-events-none absolute inset-0 overflow-hidden"

@@ -1,479 +1,346 @@
 import { useEffect, useState } from "react";
 
-const HOLD_MS = 2400;
-const FADE_MS = 550;
+const HOLD_MS = 1850;
+const FADE_MS = 520;
 
 interface Props {
   onFinish: () => void;
-}
-
-/** Inline SVG recreation of the e-Formatter logo icon */
-function EFormatterIcon({ size = 64 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 100 100"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden="true"
-    >
-      {/* ── Laptop base (bottom dish) ── */}
-      <path
-        d="M8 80 Q8 88 16 88 H84 Q92 88 92 80 L88 76 H12 Z"
-        fill="white"
-        opacity="0.9"
-      />
-
-      {/* ── Laptop screen body ── */}
-      <rect
-        x="14"
-        y="14"
-        width="72"
-        height="60"
-        rx="5"
-        ry="5"
-        stroke="white"
-        strokeWidth="4.5"
-        fill="none"
-      />
-
-      {/* ── Browser/folder tab on top ── */}
-      <path
-        d="M14 14 L14 10 Q14 6 18 6 L36 6 Q40 6 42 10 L44 14"
-        stroke="white"
-        strokeWidth="4.5"
-        fill="none"
-        strokeLinejoin="round"
-      />
-      {/* Tab dots */}
-      <circle cx="21" cy="10" r="1.8" fill="white" opacity="0.7" />
-      <circle cx="27" cy="10" r="1.8" fill="white" opacity="0.7" />
-      <circle cx="33" cy="10" r="1.8" fill="white" opacity="0.7" />
-
-      {/* ── Gear outer ring ── */}
-      <circle
-        cx="35"
-        cy="45"
-        r="13"
-        stroke="white"
-        strokeWidth="3.5"
-        fill="none"
-      />
-
-      {/* ── Gear teeth (8) ── */}
-      {[0, 45, 90, 135, 180, 225, 270, 315].map((deg) => {
-        const rad = (deg * Math.PI) / 180;
-        const x1 = 35 + Math.cos(rad) * 13;
-        const y1 = 45 + Math.sin(rad) * 13;
-        const x2 = 35 + Math.cos(rad) * 17.5;
-        const y2 = 45 + Math.sin(rad) * 17.5;
-        return (
-          <line
-            key={deg}
-            x1={x1}
-            y1={y1}
-            x2={x2}
-            y2={y2}
-            stroke="white"
-            strokeWidth="3.8"
-            strokeLinecap="round"
-          />
-        );
-      })}
-
-      {/* ── Inner gear hub ── */}
-      <circle
-        cx="35"
-        cy="45"
-        r="7"
-        stroke="white"
-        strokeWidth="2.5"
-        fill="none"
-      />
-
-      {/* ── "e" letterform inside gear ── */}
-      <path
-        d="M30.5 45 H39.5 M31 42 Q30 49 36 50 Q40 50 40 47"
-        stroke="white"
-        strokeWidth="2.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill="none"
-      />
-
-      {/* ── Circuit connector dot ── */}
-      <circle cx="51" cy="33" r="2" fill="white" opacity="0.45" />
-      <line
-        x1="51"
-        y1="35"
-        x2="51"
-        y2="40"
-        stroke="white"
-        strokeWidth="1.5"
-        opacity="0.35"
-      />
-
-      {/* ── Text lines right side ── */}
-      <rect
-        x="54"
-        y="33"
-        width="24"
-        height="4"
-        rx="2"
-        fill="white"
-        opacity="0.85"
-      />
-      <rect
-        x="54"
-        y="41"
-        width="20"
-        height="4"
-        rx="2"
-        fill="white"
-        opacity="0.65"
-      />
-      <rect
-        x="54"
-        y="49"
-        width="22"
-        height="4"
-        rx="2"
-        fill="white"
-        opacity="0.65"
-      />
-      <rect
-        x="54"
-        y="57"
-        width="16"
-        height="4"
-        rx="2"
-        fill="white"
-        opacity="0.45"
-      />
-
-      {/* ── Bottom bar ── */}
-      <rect
-        x="20"
-        y="67"
-        width="60"
-        height="3.5"
-        rx="1.75"
-        fill="white"
-        opacity="0.25"
-      />
-    </svg>
-  );
 }
 
 export default function SplashScreen({ onFinish }: Props) {
   const [phase, setPhase] = useState<"enter" | "visible" | "exit">("enter");
 
   useEffect(() => {
-    const t0 = requestAnimationFrame(() => setPhase("visible"));
-    const t1 = setTimeout(() => setPhase("exit"), HOLD_MS);
-    const t2 = setTimeout(onFinish, HOLD_MS + FADE_MS);
+    const frame = requestAnimationFrame(() => setPhase("visible"));
+    const exitTimer = window.setTimeout(() => setPhase("exit"), HOLD_MS);
+    const finishTimer = window.setTimeout(onFinish, HOLD_MS + FADE_MS);
+
     return () => {
-      cancelAnimationFrame(t0);
-      clearTimeout(t1);
-      clearTimeout(t2);
+      cancelAnimationFrame(frame);
+      window.clearTimeout(exitTimer);
+      window.clearTimeout(finishTimer);
     };
   }, [onFinish]);
 
   return (
     <>
       <style>{`
-        @keyframes sp-ring {
-          0%   { transform: scale(1);   opacity: 0.6; }
-          100% { transform: scale(3.8); opacity: 0;   }
+        @keyframes ef-splash-card-in {
+          from { opacity: 0; transform: translate3d(0, 22px, 0) scale(0.94); }
+          to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
         }
-        @keyframes sp-logo-in {
-          from { transform: scale(0.38) translateY(22px); opacity: 0; }
-          to   { transform: scale(1)    translateY(0);    opacity: 1; }
+
+        @keyframes ef-splash-icon-float {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-7px); }
         }
-        @keyframes sp-text-in {
-          from { transform: translateY(16px); opacity: 0; }
-          to   { transform: translateY(0);    opacity: 1; }
-        }
-        @keyframes sp-fade-up {
-          from { transform: translateY(10px); opacity: 0; }
-          to   { transform: translateY(0);    opacity: 1; }
-        }
-        @keyframes sp-glow-pulse {
+
+        @keyframes ef-splash-border-glow {
           from {
             box-shadow:
-              0 0 0 1px rgba(59,130,246,0.30),
-              0 0 26px rgba(37,99,235,0.50),
-              0 0 60px rgba(37,99,235,0.20),
-              0 14px 44px rgba(0,0,0,0.60),
-              inset 0 1px 0 rgba(255,255,255,0.10);
+              0 0 0 1px rgba(234, 213, 141, 0.48),
+              0 0 26px rgba(119, 230, 232, 0.24),
+              inset 0 0 28px rgba(119, 230, 232, 0.07);
           }
           to {
             box-shadow:
-              0 0 0 1px rgba(96,165,250,0.48),
-              0 0 50px rgba(59,130,246,0.75),
-              0 0 100px rgba(37,99,235,0.32),
-              0 14px 44px rgba(0,0,0,0.60),
-              inset 0 1px 0 rgba(255,255,255,0.18);
+              0 0 0 1px rgba(234, 213, 141, 0.82),
+              0 0 46px rgba(119, 230, 232, 0.38),
+              inset 0 0 36px rgba(119, 230, 232, 0.12);
           }
         }
-        @keyframes sp-bar-fill {
-          from { width: 0%; }
-          to   { width: 100%; }
-        }
-        @keyframes sp-orb-drift {
-          0%,100% { transform: translate(0,0); }
-          50%     { transform: translate(16px, 12px); }
-        }
-        @keyframes sp-grid-in {
-          from { opacity: 0; }
-          to   { opacity: 1; }
+
+        @keyframes ef-splash-line-scan {
+          from { transform: translateX(-40%); opacity: 0; }
+          18% { opacity: 0.65; }
+          to { transform: translateX(120%); opacity: 0; }
         }
 
-        /* ── Root shell ── */
-        .sp-root {
+        @keyframes ef-splash-progress {
+          from { transform: scaleX(0); }
+          to { transform: scaleX(1); }
+        }
+
+        @keyframes ef-splash-hex-drift {
+          0%, 100% { transform: translate3d(0, 0, 0); opacity: 0.58; }
+          50% { transform: translate3d(14px, -10px, 0); opacity: 0.84; }
+        }
+
+        .ef-splash {
           position: fixed;
           inset: 0;
           z-index: 99999;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
+          display: grid;
+          place-items: center;
           overflow: hidden;
-          font-family: 'Inter', system-ui, -apple-system, sans-serif;
-          /* Matches app dark: --bg-page #0d1117 → --status-bg #1e293b */
-          background: linear-gradient(158deg, #0f172a 0%, #1e293b 50%, #0d1117 100%);
+          min-height: 100svh;
+          padding: max(24px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
+          color: #f7f3df;
+          font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+          background:
+            radial-gradient(circle at 50% 28%, rgba(112, 230, 232, 0.27), transparent 34%),
+            radial-gradient(circle at 12% 18%, rgba(234, 213, 141, 0.10), transparent 30%),
+            linear-gradient(145deg, #08333d 0%, #062b35 46%, #020b13 100%);
           opacity: 0;
-          transition: opacity ${FADE_MS}ms cubic-bezier(0.4,0,0.2,1);
           user-select: none;
           -webkit-user-select: none;
+          transition: opacity ${FADE_MS}ms cubic-bezier(0.4, 0, 0.2, 1);
         }
-        .sp-root.sp-visible { opacity: 1; }
-        .sp-root.sp-exit    { opacity: 0; pointer-events: none; }
 
-        /* ── Dot grid (mirrors app blob texture idea) ── */
-        .sp-grid {
+        .ef-splash--visible { opacity: 1; }
+        .ef-splash--exit { opacity: 0; pointer-events: none; }
+
+        .ef-splash__frame {
+          position: absolute;
+          inset: clamp(14px, 2.7vw, 36px);
+          border-radius: clamp(22px, 4vw, 34px);
+          border: 1px solid rgba(234, 213, 141, 0.58);
+          pointer-events: none;
+          animation: ef-splash-border-glow 1.8s ease-in-out infinite alternate;
+        }
+
+        .ef-splash__frame::before,
+        .ef-splash__frame::after {
+          content: "";
+          position: absolute;
+          left: 16px;
+          right: 16px;
+          height: 1px;
+          background: linear-gradient(90deg, transparent, rgba(119, 230, 232, 0.33), transparent);
+        }
+
+        .ef-splash__frame::before { top: 30%; }
+        .ef-splash__frame::after { bottom: 30%; }
+
+        .ef-splash__glow {
+          position: absolute;
+          width: min(76vw, 760px);
+          aspect-ratio: 1;
+          border-radius: 999px;
+          background: radial-gradient(circle, rgba(119, 230, 232, 0.26), transparent 64%);
+          filter: blur(30px);
+        }
+
+        .ef-splash__hex {
           position: absolute;
           inset: 0;
+          opacity: 0.58;
           background-image:
-            linear-gradient(rgba(37,99,235,0.065) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(37,99,235,0.065) 1px, transparent 1px);
-          background-size: 46px 46px;
-          animation: sp-grid-in 0.9s ease both;
+            linear-gradient(30deg, rgba(119, 230, 232, 0.08) 12%, transparent 12.5%, transparent 87%, rgba(119, 230, 232, 0.08) 87.5%, rgba(119, 230, 232, 0.08)),
+            linear-gradient(150deg, rgba(119, 230, 232, 0.08) 12%, transparent 12.5%, transparent 87%, rgba(119, 230, 232, 0.08) 87.5%, rgba(119, 230, 232, 0.08)),
+            linear-gradient(30deg, rgba(119, 230, 232, 0.08) 12%, transparent 12.5%, transparent 87%, rgba(119, 230, 232, 0.08) 87.5%, rgba(119, 230, 232, 0.08)),
+            linear-gradient(150deg, rgba(119, 230, 232, 0.08) 12%, transparent 12.5%, transparent 87%, rgba(119, 230, 232, 0.08) 87.5%, rgba(119, 230, 232, 0.08));
+          background-position: 0 0, 0 0, 48px 84px, 48px 84px;
+          background-size: 96px 168px;
+          mask-image: radial-gradient(circle at center, black 0%, black 44%, transparent 78%);
+          -webkit-mask-image: radial-gradient(circle at center, black 0%, black 44%, transparent 78%);
+          animation: ef-splash-hex-drift 9s ease-in-out infinite;
         }
 
-        /* ── Floating orbs (matches app --blob-* colors in dark) ── */
-        .sp-orb {
+        .ef-splash__scan {
           position: absolute;
-          border-radius: 50%;
-          pointer-events: none;
-          filter: blur(70px);
-        }
-        .sp-orb-1 {
-          width: 400px; height: 400px;
-          top: -130px; left: -110px;
-          background: rgba(29, 78, 216, 0.22);   /* --blob-1 dark */
-          animation: sp-orb-drift 10s ease-in-out infinite;
-        }
-        .sp-orb-2 {
-          width: 320px; height: 320px;
-          bottom: -90px; right: -90px;
-          background: rgba(79, 70, 229, 0.18);   /* --blob-2 dark */
-          animation: sp-orb-drift 13s ease-in-out infinite reverse;
-        }
-        .sp-orb-3 {
-          width: 220px; height: 220px;
-          top: 50%; left: 50%;
-          transform: translate(-50%, -50%);
-          background: rgba(3, 105, 161, 0.14);   /* --blob-3 dark */
-          filter: blur(55px);
+          top: 22%;
+          left: 0;
+          width: 56%;
+          height: 1px;
+          background: linear-gradient(90deg, transparent, rgba(234, 213, 141, 0.70), rgba(119, 230, 232, 0.75), transparent);
+          animation: ef-splash-line-scan 2.4s ease-in-out infinite;
         }
 
-        /* ── Pulse rings ── */
-        .sp-ring {
-          position: absolute;
-          width: 144px; height: 144px;
-          border-radius: 50%;
-          border: 1px solid rgba(59,130,246,0.25);
-          animation: sp-ring 3s ease-out infinite;
-        }
-        .sp-ring-2 { animation-delay: 0.9s;  border-color: rgba(59,130,246,0.13); }
-        .sp-ring-3 { animation-delay: 1.8s;  border-color: rgba(59,130,246,0.07); }
-
-        /* ── Logo group ── */
-        .sp-logo-wrap {
+        .ef-splash__card {
           position: relative;
-          z-index: 10;
+          z-index: 2;
+          width: min(92vw, 520px);
           display: flex;
           flex-direction: column;
           align-items: center;
-          gap: 24px;
-          animation: sp-logo-in 0.8s cubic-bezier(0.34,1.56,0.64,1) 0.1s both;
+          gap: 18px;
+          padding: clamp(26px, 6vw, 42px) clamp(20px, 5vw, 38px);
+          border-radius: clamp(28px, 6vw, 42px);
+          border: 1px solid rgba(234, 213, 141, 0.26);
+          background:
+            linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02)),
+            rgba(2, 11, 19, 0.36);
+          backdrop-filter: blur(22px);
+          -webkit-backdrop-filter: blur(22px);
+          box-shadow: 0 28px 84px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.10);
+          animation: ef-splash-card-in 680ms cubic-bezier(0.22, 1, 0.36, 1) both;
         }
 
-        /* ── Icon box (glassmorphism + accent blue glow) ── */
-        .sp-icon-box {
-          width: 116px; height: 116px;
-          border-radius: 34px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          /* Gradient echoes --accent (#2563eb) in dark mode */
-          background: linear-gradient(148deg,
-            rgba(37,99,235,0.50) 0%,
-            rgba(30,64,175,0.65) 100%
-          );
-          border: 1.5px solid rgba(147,197,253,0.20);
-          backdrop-filter: blur(18px);
-          -webkit-backdrop-filter: blur(18px);
-          animation: sp-glow-pulse 2.4s ease-in-out 1s infinite alternate;
+        .ef-splash__icon-shell {
+          position: relative;
+          width: clamp(118px, 32vw, 166px);
+          aspect-ratio: 1;
+          display: grid;
+          place-items: center;
+          border-radius: 30%;
+          background: rgba(6, 43, 53, 0.42);
         }
 
-        /* ── Text group ── */
-        .sp-text {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 6px;
-          animation: sp-text-in 0.6s cubic-bezier(0.22,1,0.36,1) 0.55s both;
-        }
-
-        /* App name — matches app font weight 800 usage */
-        .sp-name {
-          font-size: 33px;
-          font-weight: 800;
-          letter-spacing: -0.6px;
-          color: #e2e8f0;              /* ~--text-primary dark */
-          line-height: 1;
-          margin: 0;
-        }
-        /* "e-" in app's --accent-light #93c5fd */
-        .sp-name em {
-          font-style: normal;
-          color: #93c5fd;
-        }
-
-        /* Tagline matches app's small uppercase tracking labels */
-        .sp-tagline {
-          font-size: 10px;
-          font-weight: 500;
-          letter-spacing: 3.2px;
-          text-transform: uppercase;
-          color: rgba(148,163,184,0.60);   /* --text-muted dark */
-          margin: 0;
-        }
-
-        /* ── Institution badge ── */
-        .sp-badge {
-          margin-top: 8px;
-          display: inline-flex;
-          align-items: center;
-          gap: 7px;
-          padding: 5px 13px;
-          border-radius: 999px;
-          border: 1px solid rgba(59,130,246,0.20);
-          background: rgba(37,99,235,0.10);
-          animation: sp-fade-up 0.45s ease 1s both;
-        }
-        .sp-badge-dot {
-          width: 5px; height: 5px;
-          border-radius: 50%;
-          background: #3b82f6;
-          box-shadow: 0 0 5px rgba(59,130,246,0.9);
-        }
-        .sp-badge-label {
-          font-size: 9.5px;
-          font-weight: 600;
-          letter-spacing: 0.3px;
-          color: rgba(147,197,253,0.70);  /* --accent-light dark */
-        }
-
-        /* ── Progress bar ── */
-        .sp-bar-wrap {
+        .ef-splash__icon-shell::before {
+          content: "";
           position: absolute;
-          bottom: 50px;
-          left: 50%;
-          transform: translateX(-50%);
-          width: 76px;
-          opacity: 0;
-          animation: sp-fade-up 0.35s ease 1.2s forwards;
+          inset: -12px;
+          border-radius: inherit;
+          background: radial-gradient(circle, rgba(119, 230, 232, 0.38), transparent 64%);
+          filter: blur(12px);
         }
-        .sp-bar-track {
+
+        .ef-splash__icon {
+          position: relative;
           width: 100%;
-          height: 2px;
-          border-radius: 2px;
-          background: rgba(255,255,255,0.07);
-          overflow: hidden;
-        }
-        .sp-bar-fill {
           height: 100%;
-          border-radius: 2px;
-          /* Matches --accent → --accent-light */
-          background: linear-gradient(90deg, #2563eb 0%, #93c5fd 100%);
-          animation: sp-bar-fill ${HOLD_MS - 1000}ms cubic-bezier(0.25,0,0.35,1) 1.2s both;
+          border-radius: 30%;
+          object-fit: cover;
+          filter: drop-shadow(0 0 12px rgba(119, 230, 232, 0.40));
+          animation: ef-splash-icon-float 2.4s ease-in-out infinite;
         }
 
-        /* ── Dev credit ── */
-        .sp-credit {
+        .ef-splash__kicker {
+          margin: 0;
+          font-size: clamp(10px, 2.4vw, 13px);
+          font-weight: 800;
+          letter-spacing: clamp(0.14em, 1.1vw, 0.24em);
+          text-align: center;
+          text-transform: uppercase;
+          color: rgba(245, 249, 247, 0.90);
+          text-shadow: 0 2px 10px rgba(0,0,0,0.45);
+        }
+
+        .ef-splash__title {
+          margin: 0;
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: center;
+          align-items: baseline;
+          gap: 0.18em;
+          font-size: clamp(36px, 10vw, 66px);
+          line-height: 0.92;
+          font-weight: 950;
+          letter-spacing: -0.055em;
+          text-align: center;
+          color: #ead58f;
+          text-transform: uppercase;
+          text-shadow:
+            0 2px 0 rgba(0,0,0,0.22),
+            0 0 22px rgba(234, 213, 141, 0.28);
+        }
+
+        .ef-splash__title-prefix {
+          color: #dffcf5;
+          text-transform: none;
+          letter-spacing: -0.04em;
+        }
+
+        .ef-splash__bracket {
+          font-weight: 800;
+          color: rgba(234, 213, 141, 0.74);
+          letter-spacing: -0.10em;
+        }
+
+        .ef-splash__subline {
+          margin: 0;
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.18em;
+          text-align: center;
+          text-transform: uppercase;
+          color: rgba(164, 230, 228, 0.78);
+        }
+
+        .ef-splash__progress {
+          width: min(190px, 48vw);
+          height: 3px;
+          margin-top: 4px;
+          overflow: hidden;
+          border-radius: 999px;
+          background: rgba(255,255,255,0.12);
+        }
+
+        .ef-splash__progress-fill {
+          width: 100%;
+          height: 100%;
+          transform-origin: left center;
+          border-radius: inherit;
+          background: linear-gradient(90deg, #77e6e8 0%, #ead58f 100%);
+          animation: ef-splash-progress ${HOLD_MS - 180}ms cubic-bezier(0.25, 0, 0.35, 1) 160ms both;
+        }
+
+        .ef-splash__credit {
           position: absolute;
-          bottom: 24px;
-          font-size: 9px;
-          font-weight: 500;
-          letter-spacing: 0.3px;
-          color: rgba(100,116,139,0.55);  /* --text-muted dark */
-          opacity: 0;
-          animation: sp-fade-up 0.35s ease 1.4s forwards;
+          bottom: max(26px, calc(env(safe-area-inset-bottom) + 16px));
+          left: 50%;
+          width: min(90vw, 520px);
+          transform: translateX(-50%);
+          margin: 0;
+          font-size: 10px;
+          font-weight: 600;
+          letter-spacing: 0.04em;
+          text-align: center;
+          color: rgba(216, 255, 244, 0.42);
+        }
+
+        @media (max-width: 420px) {
+          .ef-splash__card { width: min(92vw, 360px); }
+          .ef-splash__title { gap: 0.10em; }
+          .ef-splash__bracket { display: none; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .ef-splash,
+          .ef-splash *,
+          .ef-splash *::before,
+          .ef-splash *::after {
+            animation-duration: 1ms !important;
+            animation-iteration-count: 1 !important;
+            scroll-behavior: auto !important;
+          }
         }
       `}</style>
 
       <div
         className={[
-          "sp-root",
-          phase === "visible" ? "sp-visible" : "",
-          phase === "exit" ? "sp-exit" : "",
+          "ef-splash",
+          phase === "visible" ? "ef-splash--visible" : "",
+          phase === "exit" ? "ef-splash--exit" : "",
         ].join(" ")}
-        aria-label="Loading e-Formatter"
         role="status"
+        aria-label="Loading e-Formatter"
       >
-        {/* Background */}
-        <div className="sp-grid" />
-        <div className="sp-orb sp-orb-1" />
-        <div className="sp-orb sp-orb-2" />
-        <div className="sp-orb sp-orb-3" />
+        <div className="ef-splash__glow" aria-hidden="true" />
+        <div className="ef-splash__hex" aria-hidden="true" />
+        <div className="ef-splash__scan" aria-hidden="true" />
+        <div className="ef-splash__frame" aria-hidden="true" />
 
-        {/* Pulse rings */}
-        <div className="sp-ring" />
-        <div className="sp-ring sp-ring-2" />
-        <div className="sp-ring sp-ring-3" />
-
-        {/* Logo + Text */}
-        <div className="sp-logo-wrap">
-          <div className="sp-icon-box">
-            <EFormatterIcon size={70} />
+        <section className="ef-splash__card" aria-hidden="true">
+          <div className="ef-splash__icon-shell">
+            <img
+              className="ef-splash__icon"
+              src="/images/icon-512.png"
+              alt=""
+              width="166"
+              height="166"
+              draggable={false}
+            />
           </div>
 
-          <div className="sp-text">
-            <h1 className="sp-name">
-              <em>e-</em>Formatter
+          <div>
+            <p className="ef-splash__kicker">Digital Manuscript Processing</p>
+            <h1 className="ef-splash__title">
+              <span className="ef-splash__bracket">&lt;</span>
+              <span className="ef-splash__title-prefix">e-</span>
+              <span>Formatter</span>
+              <span className="ef-splash__bracket">&gt;</span>
             </h1>
-            <p className="sp-tagline">Digital Manuscript Processing</p>
-            <div className="sp-badge">
-              <div className="sp-badge-dot" />
-              <span className="sp-badge-label">
-                City College of Calamba · OVPREPQA
-              </span>
-            </div>
           </div>
-        </div>
 
-        {/* Progress bar */}
-        <div className="sp-bar-wrap">
-          <div className="sp-bar-track">
-            <div className="sp-bar-fill" />
+          <p className="ef-splash__subline">City College of Calamba · OVPREPQA</p>
+          <div className="ef-splash__progress" aria-hidden="true">
+            <div className="ef-splash__progress-fill" />
           </div>
-        </div>
+        </section>
 
-        <p className="sp-credit">Developed by Railey Dela Peña</p>
+        <p className="ef-splash__credit">Developed by Railey Dela Peña</p>
       </div>
     </>
   );
