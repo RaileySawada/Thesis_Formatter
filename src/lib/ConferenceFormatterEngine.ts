@@ -1,5 +1,6 @@
 import type { ConferenceFormat } from "../constants";
 import { requestPollinations } from "./pollinationsClient";
+import { isAiAssistEnabled } from "./aiAssist";
 
 interface ConferenceFormatOptions {
   format: ConferenceFormat;
@@ -13,10 +14,8 @@ interface AuthorEntry {
   contact: string;
 }
 
-const AI_ASSIST_ENABLED = ["true", "1", "yes", "on"].includes(
-  String(import.meta.env.VITE_ENABLE_AI_ASSIST ?? "")
-    .trim()
-    .toLowerCase(),
+const AI_ASSIST_ENABLED = isAiAssistEnabled(
+  import.meta.env.VITE_ENABLE_AI_ASSIST,
 );
 
 const PUBFORM_SOURCE_FILE = "/conference/publication_formatting_guidelines.docx";
@@ -510,7 +509,7 @@ async function tryExtractAuthorsWithAi(lines: string[]): Promise<AuthorEntry[] |
     const aiAuthors = coerceAuthorEntries(parsed.authors);
     return aiAuthors.length > 0 ? aiAuthors : null;
   } catch (error) {
-    console.warn("[Conference Formatter] AI author extraction failed, using parser fallback.", error);
+    void error;
     return null;
   }
 }
@@ -1000,11 +999,6 @@ async function applyPublicationTemplate(inputZip: any, pubformZip: any): Promise
   const parsedAuthors = parseAuthorEntriesFromFrontMatter(frontMatterLines);
   const aiAuthors = await tryExtractAuthorsWithAi(frontMatterLines);
   const authors = normalizeAuthorEntries(aiAuthors ?? parsedAuthors);
-  console.info("[Conference Formatter] Author extraction", {
-    source: aiAuthors && aiAuthors.length > 0 ? "ai" : "parser",
-    count: authors.length,
-  });
-
   const titleText = frontMatterLines[0] ?? "";
   if (titleText && templateParas[0]) {
     setParagraphText(templateParas[0], templateWNs, titleText);

@@ -370,9 +370,6 @@ export default function Sidebar({
               );
             })}
           </div>
-          <p className="mt-2 text-[10px]" style={{ color: "var(--text-muted)" }}>
-            Conference mode applies a full-document conference rule set and skips CCC formatting.
-          </p>
         </div>
       )}
 

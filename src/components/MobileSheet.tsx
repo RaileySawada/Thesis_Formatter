@@ -346,9 +346,6 @@ export default function MobileSheet({
                   );
                 })}
               </div>
-              <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
-                Conference mode skips CCC formatting and applies the selected conference rule set.
-              </p>
             </div>
           )}
 

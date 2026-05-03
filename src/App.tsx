@@ -26,18 +26,50 @@ import PreviewModal from "./components/PreviewModal";
 import MobileStylesSheet from "./components/MobileStylesSheet";
 import Toast from "./components/Toast";
 import { requestPollinations } from "./lib/pollinationsClient";
+import { isAiAssistEnabled } from "./lib/aiAssist";
 
 type AiRunStatus = "not-used" | "running" | "success" | "failed";
+type ProcessLogLevel = "info" | "success" | "error";
 
-const AI_ASSIST_ENABLED = ["true", "1", "yes", "on"].includes(
-  String(import.meta.env.VITE_ENABLE_AI_ASSIST ?? "")
-    .trim()
-    .toLowerCase(),
+interface ProcessLogEntry {
+  id: number;
+  at: string;
+  level: ProcessLogLevel;
+  message: string;
+}
+
+const AI_ASSIST_ENABLED = isAiAssistEnabled(
+  import.meta.env.VITE_ENABLE_AI_ASSIST,
 );
 
 function formatDuration(ms: number): string {
   if (ms >= 1000) return `${(ms / 1000).toFixed(2)}s`;
   return `${Math.max(0, Math.round(ms))}ms`;
+}
+
+function formatLogTime(date = new Date()): string {
+  return date.toLocaleTimeString([], { hour12: false });
+}
+
+function toUserSafeErrorMessage(error: unknown): string {
+  const raw =
+    error instanceof Error ? error.message.trim() : String(error ?? "").trim();
+  if (!raw) return "Formatting failed. Please try again.";
+
+  if (/missing\s+pollinations_api_key/iu.test(raw)) {
+    return "AI service key is missing in the server configuration.";
+  }
+  if (/failed to reach pollinations api/iu.test(raw)) {
+    return "AI service is currently unreachable. Local formatting fallback was used.";
+  }
+  if (/pollinations api returned an error/iu.test(raw)) {
+    return "AI service returned an error. Local formatting fallback was used.";
+  }
+  if (/unable to load .*format.*source file/iu.test(raw)) {
+    return "The selected conference format file could not be loaded.";
+  }
+
+  return raw;
 }
 
 // PWA install prompt is handled entirely by InstallPrompt.tsx
@@ -249,8 +281,10 @@ export default function App() {
   const [aiStatus, setAiStatus] = useState<AiRunStatus>("not-used");
   const [lastAiMs, setLastAiMs] = useState<number | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [processLogs, setProcessLogs] = useState<ProcessLogEntry[]>([]);
   const [toast, setToast] = useState<ToastMsg | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const processLogRef = useRef<HTMLDivElement | null>(null);
 
   const showToast = useCallback(
     (msg: string, type: "success" | "error" = "success", actionLabel?: string, onAction?: () => void) => {
@@ -265,6 +299,28 @@ export default function App() {
     },
     [],
   );
+
+  const pushProcessLog = useCallback(
+    (level: ProcessLogLevel, message: string) => {
+      setProcessLogs((prev) => [
+        ...prev.slice(-79),
+        {
+          id: Date.now() + Math.floor(Math.random() * 1000),
+          at: formatLogTime(),
+          level,
+          message,
+        },
+      ]);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (formattingStandard !== "conference") return;
+    const node = processLogRef.current;
+    if (!node) return;
+    node.scrollTop = node.scrollHeight;
+  }, [processLogs, formattingStandard]);
 
   useEffect(() => {
     if (!processing) return;
@@ -282,16 +338,22 @@ export default function App() {
     setActiveElapsedMs(0);
     setLastAiMs(null);
     setAiError(null);
+    setProcessLogs([
+      {
+        id: Date.now(),
+        at: formatLogTime(),
+        level: "info",
+        message: `Run started for ${file.name}.`,
+      },
+    ]);
 
     let runAiStatus: AiRunStatus = AI_ASSIST_ENABLED ? "running" : "not-used";
     let runAiMs: number | null = null;
-    let runAiRequestedModel: string | null = null;
-    let runAiResponseModel: string | null = null;
-    let runAiEndpoint: string | null = null;
     setAiStatus(runAiStatus);
 
     try {
       if (AI_ASSIST_ENABLED) {
+        pushProcessLog("info", "Checking AI assistant connectivity...");
         const aiStartedAt = performance.now();
         try {
           const aiResult = await requestPollinations({
@@ -300,32 +362,29 @@ export default function App() {
             temperature: 0,
             maxTokens: 8,
           });
-          runAiRequestedModel = aiResult.meta?.requestedModel ?? null;
-          runAiResponseModel =
-            aiResult.meta?.responseModel ??
-            (typeof aiResult.data === "object" &&
-            aiResult.data !== null &&
-            "model" in aiResult.data
-              ? ((aiResult.data as { model?: string }).model ?? null)
-              : null);
-          runAiEndpoint = aiResult.meta?.endpoint ?? null;
-          console.info("[AI Assist] Pollinations health check success", {
-            requestedModel: runAiRequestedModel,
-            responseModel: runAiResponseModel,
-            endpoint: runAiEndpoint,
-          });
+          void aiResult;
           runAiStatus = "success";
         } catch (aiErr) {
           runAiStatus = "failed";
-          const aiMessage =
-            aiErr instanceof Error ? aiErr.message : String(aiErr);
-          setAiError(aiMessage);
-          console.error("[AI Assist] Pollinations health check failed:", aiErr);
+          setAiError(toUserSafeErrorMessage(aiErr));
         } finally {
           runAiMs = Math.round(performance.now() - aiStartedAt);
           setLastAiMs(runAiMs);
           setAiStatus(runAiStatus);
+          if (runAiStatus === "success") {
+            pushProcessLog(
+              "success",
+              `AI check passed in ${formatDuration(runAiMs)}.`,
+            );
+          } else {
+            pushProcessLog(
+              "error",
+              `AI check failed after ${formatDuration(runAiMs)}. Local fallback active.`,
+            );
+          }
         }
+      } else {
+        pushProcessLog("info", "AI check disabled. Using local rule-based formatting.");
       }
 
       const runPreliminary = selectedSections.includes("preliminary");
@@ -336,18 +395,29 @@ export default function App() {
       let blob: Blob | null = null;
 
       if (formattingStandard === "conference") {
+        const conferenceLabel =
+          CONFERENCE_FORMATS.find((fmt) => fmt.value === conferenceFormat)
+            ?.label ?? "Conference";
+        pushProcessLog(
+          "info",
+          `Applying ${conferenceLabel} formatting to the full document...`,
+        );
         blob = await formatDocxConference(currentBuffer, {
           format: conferenceFormat,
         });
+        pushProcessLog("success", `${conferenceLabel} formatting completed.`);
       } else {
         if (runPreliminary) {
+          pushProcessLog("info", "Formatting preliminary pages...");
           blob = await formatPreliminary(currentBuffer, {
             rules: enabledRules,
             config: formattingConfig,
           });
           currentBuffer = await blob.arrayBuffer();
+          pushProcessLog("success", "Preliminary pages formatted.");
         }
         if (runChapters) {
+          pushProcessLog("info", "Formatting chapters and references...");
           if (citationStyle === "apa") {
             blob = await formatDocxApa(currentBuffer, {
               sections: selectedSections,
@@ -363,12 +433,15 @@ export default function App() {
             });
           }
           currentBuffer = await blob.arrayBuffer();
+          pushProcessLog("success", "Chapters and references formatted.");
         }
         if (runAppendices) {
+          pushProcessLog("info", "Formatting appendices...");
           blob = await formatAppendices(currentBuffer, {
             rules: enabledRules,
             config: formattingConfig,
           });
+          pushProcessLog("success", "Appendices formatted.");
         }
       }
 
@@ -395,41 +468,19 @@ export default function App() {
             ? " AI check: failed. Local formatting fallback used."
             : " AI check: off (local rule-based formatting).";
 
-      console.info("[Formatter] Completed", {
-        file: file.name,
-        formattingStandard,
-        conferenceFormat,
-        citationStyle,
-        durationMs: totalMs,
-        aiStatus: runAiStatus,
-        aiDurationMs: runAiMs,
-        aiRequestedModel: runAiRequestedModel,
-        aiResponseModel: runAiResponseModel,
-        aiEndpoint: runAiEndpoint,
-      });
-
       showToast(
         `Formatted in ${formatDuration(totalMs)}.${aiSummary} Download started.`,
+      );
+      pushProcessLog(
+        "success",
+        `Formatting finished in ${formatDuration(totalMs)}. Download started.`,
       );
     } catch (err) {
       const totalMs = Math.round(performance.now() - startedAt);
       setLastRunMs(totalMs);
-
-      console.error("[Formatter] Apply failed", {
-        error: err,
-        file: file.name,
-        formattingStandard,
-        conferenceFormat,
-        citationStyle,
-        durationMs: totalMs,
-        aiStatus: runAiStatus,
-        aiDurationMs: runAiMs,
-        aiRequestedModel: runAiRequestedModel,
-        aiResponseModel: runAiResponseModel,
-        aiEndpoint: runAiEndpoint,
-      });
-
-      showToast(err instanceof Error ? err.message : String(err), "error");
+      const safeError = toUserSafeErrorMessage(err);
+      pushProcessLog("error", safeError);
+      showToast(safeError, "error");
     } finally {
       setProcessing(false);
     }
@@ -444,6 +495,7 @@ export default function App() {
     citationStyle,
     showToast,
     formattingConfig,
+    pushProcessLog,
   ]);
 
   const sectionLabels: Record<string, string> = {
@@ -474,6 +526,9 @@ export default function App() {
   ];
   const availableFormatFiles =
     formattingStandard === "conference" ? CONFERENCE_FORMATS : cccFormatFiles;
+  const activeConferenceFormat =
+    CONFERENCE_FORMATS.find((fmt) => fmt.value === conferenceFormat) ??
+    CONFERENCE_FORMATS[0];
 
   const theme = isDark ? "dark" : "light";
 
@@ -729,7 +784,20 @@ export default function App() {
                 >
                   Formatting:
                 </span>
-                {selectedSections.length === 0 ? (
+                {formattingStandard === "conference" ? (
+                  <span
+                    className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold"
+                    style={{
+                      background: "var(--accent-subtle-strong)",
+                      color: "var(--accent)",
+                    }}
+                  >
+                    <i
+                      className={`fa-solid ${activeConferenceFormat.icon} text-[10px]`}
+                    />
+                    {activeConferenceFormat.label}
+                  </span>
+                ) : selectedSections.length === 0 ? (
                   <span
                     className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold"
                     style={{
@@ -804,112 +872,198 @@ export default function App() {
 
             {/* Coverage + Status row */}
             <div className="grid gap-5 xl:grid-cols-2">
-              <div
-                className="rounded-3xl border p-6 transition-colors duration-300"
-                style={{
-                  background: "var(--surface)",
-                  borderColor: "var(--border)",
-                  boxShadow: "var(--shadow)",
-                }}
-              >
-                <h2
-                  className="text-lg font-bold sm:text-xl"
-                  style={{ color: "var(--text-primary)" }}
+              {formattingStandard === "conference" ? (
+                <div
+                  className="rounded-3xl border p-6 transition-colors duration-300"
+                  style={{
+                    background: "var(--surface)",
+                    borderColor: "var(--border)",
+                    boxShadow: "var(--shadow)",
+                  }}
                 >
-                  <i
-                    className="fa-solid fa-list-check mr-2"
-                    style={{ color: "var(--accent)" }}
-                  />
-                  Formatting Coverage
-                </h2>
-                <p
-                  className="mt-1.5 text-sm"
-                  style={{ color: "var(--text-soft)" }}
-                >
-                  Normalizes document sections based on the selected formatting rule.
-                </p>
-                <div className="mt-4 space-y-2.5">
-                  {[
-                    {
-                      key: "preliminary",
-                      icon: "fa-file-circle-check",
-                      label: "Preliminary Pages",
-                      desc: "Title page, approval sheet, abstract, acknowledgement.",
-                    },
-                    {
-                      key: "chapters",
-                      icon: "fa-book-open",
-                      label: "Chapters and References",
-                      desc: "Chapter titles, headings, body text, figures, tables, captions, legends, references.",
-                    },
-                    {
-                      key: "appendices",
-                      icon: "fa-paperclip",
-                      label: "Appendices",
-                      desc: "Appendix labels, continuation blocks, User Manual, CV.",
-                    },
-                  ].map(({ key, icon, label, desc }) => {
-                    const active = selectedSections.includes(key);
-                    return (
-                      <div
-                        key={key}
-                        className="rounded-2xl border-2 p-4 transition-colors"
-                        style={
-                          active
-                            ? {
-                              background: "var(--accent-subtle)",
-                              borderColor: "var(--accent)",
-                            }
-                            : {
-                              background: "var(--surface-raised)",
-                              borderColor: "var(--border)",
-                            }
-                        }
-                      >
-                        <h3
-                          className="text-sm font-semibold"
-                          style={{
-                            color: active
-                              ? "var(--text-primary)"
-                              : "var(--text-secondary)",
-                          }}
-                        >
-                          <i
-                            className={`fa-solid ${icon} mr-1.5`}
-                            style={{
-                              color: active
-                                ? "var(--accent)"
-                                : "var(--text-muted)",
-                            }}
-                          />
-                          {label}
-                          {active && (
-                            <span
-                              className="ml-2 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase"
+                  <h2
+                    className="text-lg font-bold sm:text-xl"
+                    style={{ color: "var(--text-primary)" }}
+                  >
+                    <i
+                      className="fa-solid fa-terminal mr-2"
+                      style={{ color: "var(--accent)" }}
+                    />
+                    Process Log
+                  </h2>
+                  <p
+                    className="mt-1.5 text-sm"
+                    style={{ color: "var(--text-soft)" }}
+                  >
+                    Tracks formatting steps and user-safe run issues.
+                  </p>
+                  <div
+                    ref={processLogRef}
+                    className="mt-4 max-h-[330px] overflow-y-auto rounded-2xl border p-3"
+                    style={{
+                      background: "var(--surface-raised)",
+                      borderColor: "var(--border)",
+                    }}
+                  >
+                    {processLogs.length === 0 ? (
+                      <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                        No process yet. Upload a file and run formatting.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {processLogs.map((log) => {
+                          const levelColor =
+                            log.level === "error"
+                              ? "#ef4444"
+                              : log.level === "success"
+                                ? "#22c55e"
+                                : "var(--text-muted)";
+                          const levelIcon =
+                            log.level === "error"
+                              ? "fa-circle-exclamation"
+                              : log.level === "success"
+                                ? "fa-circle-check"
+                                : "fa-circle-dot";
+                          return (
+                            <div
+                              key={log.id}
+                              className="rounded-xl border px-2.5 py-2"
                               style={{
-                                background: "var(--accent-subtle-strong)",
-                                color: "var(--accent)",
+                                borderColor: "var(--border)",
+                                background: "var(--surface)",
                               }}
                             >
-                              Active
-                            </span>
-                          )}
-                        </h3>
-                        <p
-                          className="mt-1 text-xs"
-                          style={{
-                            color: active
-                              ? "var(--text-secondary)"
-                              : "var(--text-muted)",
-                          }}
-                        >
-                          {desc}
-                        </p>
+                              <p
+                                className="mb-1 text-[10px] font-semibold"
+                                style={{ color: "var(--text-muted)" }}
+                              >
+                                {log.at}
+                              </p>
+                              <p
+                                className="text-xs leading-5"
+                                style={{ color: "var(--text-secondary)" }}
+                              >
+                                <i
+                                  className={`fa-solid ${levelIcon} mr-2`}
+                                  style={{ color: levelColor }}
+                                />
+                                {log.message}
+                              </p>
+                            </div>
+                          );
+                        })}
                       </div>
-                    );
-                  })}
+                    )}
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div
+                  className="rounded-3xl border p-6 transition-colors duration-300"
+                  style={{
+                    background: "var(--surface)",
+                    borderColor: "var(--border)",
+                    boxShadow: "var(--shadow)",
+                  }}
+                >
+                  <h2
+                    className="text-lg font-bold sm:text-xl"
+                    style={{ color: "var(--text-primary)" }}
+                  >
+                    <i
+                      className="fa-solid fa-list-check mr-2"
+                      style={{ color: "var(--accent)" }}
+                    />
+                    Formatting Coverage
+                  </h2>
+                  <p
+                    className="mt-1.5 text-sm"
+                    style={{ color: "var(--text-soft)" }}
+                  >
+                    Normalizes document sections based on the selected formatting rule.
+                  </p>
+                  <div className="mt-4 space-y-2.5">
+                    {[
+                      {
+                        key: "preliminary",
+                        icon: "fa-file-circle-check",
+                        label: "Preliminary Pages",
+                        desc: "Title page, approval sheet, abstract, acknowledgement.",
+                      },
+                      {
+                        key: "chapters",
+                        icon: "fa-book-open",
+                        label: "Chapters and References",
+                        desc: "Chapter titles, headings, body text, figures, tables, captions, legends, references.",
+                      },
+                      {
+                        key: "appendices",
+                        icon: "fa-paperclip",
+                        label: "Appendices",
+                        desc: "Appendix labels, continuation blocks, User Manual, CV.",
+                      },
+                    ].map(({ key, icon, label, desc }) => {
+                      const active = selectedSections.includes(key);
+                      return (
+                        <div
+                          key={key}
+                          className="rounded-2xl border-2 p-4 transition-colors"
+                          style={
+                            active
+                              ? {
+                                background: "var(--accent-subtle)",
+                                borderColor: "var(--accent)",
+                              }
+                              : {
+                                background: "var(--surface-raised)",
+                                borderColor: "var(--border)",
+                              }
+                          }
+                        >
+                          <h3
+                            className="text-sm font-semibold"
+                            style={{
+                              color: active
+                                ? "var(--text-primary)"
+                                : "var(--text-secondary)",
+                            }}
+                          >
+                            <i
+                              className={`fa-solid ${icon} mr-1.5`}
+                              style={{
+                                color: active
+                                  ? "var(--accent)"
+                                  : "var(--text-muted)",
+                              }}
+                            />
+                            {label}
+                            {active && (
+                              <span
+                                className="ml-2 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase"
+                                style={{
+                                  background: "var(--accent-subtle-strong)",
+                                  color: "var(--accent)",
+                                }}
+                              >
+                                Active
+                              </span>
+                            )}
+                          </h3>
+                          <p
+                            className="mt-1 text-xs"
+                            style={{
+                              color: active
+                                ? "var(--text-secondary)"
+                                : "var(--text-muted)",
+                            }}
+                          >
+                            {desc}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               <StatusPanel
                 formattingStandard={formattingStandard}

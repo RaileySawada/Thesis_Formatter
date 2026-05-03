@@ -23,9 +23,7 @@ export interface PollinationsResponse {
   };
 }
 
-const DEFAULT_ENDPOINT = import.meta.env.DEV
-  ? "/api/pollinations-chat"
-  : "/.netlify/functions/pollinations-chat";
+const DEFAULT_ENDPOINT = "/api/pollinations-chat";
 
 const POLLINATIONS_ENDPOINT =
   import.meta.env.VITE_POLLINATIONS_ENDPOINT || DEFAULT_ENDPOINT;
@@ -42,7 +40,8 @@ export async function requestPollinations(
     }),
   });
 
-  const json = (await response.json()) as {
+  const raw = await response.text();
+  let json: {
     reply?: string;
     data?: unknown;
     meta?: {
@@ -51,10 +50,22 @@ export async function requestPollinations(
       responseModel?: string | null;
     };
     error?: string;
-  };
+    detail?: string;
+  } = {};
+
+  try {
+    json = raw ? (JSON.parse(raw) as typeof json) : {};
+  } catch {
+    json = {};
+  }
 
   if (!response.ok) {
-    throw new Error(json.error || "Pollinations request failed.");
+    const msg = json.error || `Pollinations request failed (${response.status}).`;
+    const detail =
+      typeof json.detail === "string" && json.detail.trim() !== ""
+        ? ` ${json.detail}`
+        : "";
+    throw new Error(`${msg}${detail}`);
   }
 
   return {

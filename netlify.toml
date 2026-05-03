@@ -3,3 +3,7 @@
   publish = "dist"
   functions = "netlify/functions"
 
+[[redirects]]
+  from = "/api/pollinations-chat"
+  to = "/.netlify/functions/pollinations-chat"
+  status = 200
