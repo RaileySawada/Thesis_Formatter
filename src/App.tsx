@@ -33,6 +33,7 @@ import MobileConferenceStylesSheet from "./components/MobileConferenceStylesShee
 import Toast from "./components/Toast";
 import { requestPollinations } from "./lib/pollinationsClient";
 import { isAiAssistEnabled } from "./lib/aiAssist";
+import SplashScreen from "./components/SplashScreen";
 
 type AiRunStatus = "not-used" | "running" | "success" | "failed";
 type ProcessLogLevel = "info" | "success" | "error";
@@ -209,7 +210,10 @@ export default function App() {
   // Version key: bump this whenever defaults change structurally (e.g. new fields, changed defaults)
   const CONFIG_VERSION = "v3";
 
-  const loadConfig = (key: string, defaults: FormattingConfig): FormattingConfig => {
+  const loadConfig = (
+    key: string,
+    defaults: FormattingConfig,
+  ): FormattingConfig => {
     const saved = localStorage.getItem(key);
     const savedVersion = localStorage.getItem(key + "_version");
     if (saved && savedVersion === CONFIG_VERSION) {
@@ -227,8 +231,15 @@ export default function App() {
         // Deep merge: defaults take precedence for nested objects, then overlay saved values
         const merged: FormattingConfig = { ...defaults };
         for (const k of Object.keys(defaults) as (keyof FormattingConfig)[]) {
-          if (parsed[k] !== undefined && typeof parsed[k] === "object" && typeof (defaults[k] as any) === "object") {
-            (merged as any)[k] = { ...(defaults[k] as any), ...(parsed[k] as any) };
+          if (
+            parsed[k] !== undefined &&
+            typeof parsed[k] === "object" &&
+            typeof (defaults[k] as any) === "object"
+          ) {
+            (merged as any)[k] = {
+              ...(defaults[k] as any),
+              ...(parsed[k] as any),
+            };
           } else if (parsed[k] !== undefined) {
             (merged as any)[k] = parsed[k];
           }
@@ -243,8 +254,12 @@ export default function App() {
     return defaults;
   };
 
-  const [configIeee, setConfigIeee] = useState<FormattingConfig>(() => loadConfig("thesis_formatting_config_ieee", DEFAULT_CONFIG_IEEE));
-  const [configApa, setConfigApa] = useState<FormattingConfig>(() => loadConfig("thesis_formatting_config_apa", DEFAULT_CONFIG_APA));
+  const [configIeee, setConfigIeee] = useState<FormattingConfig>(() =>
+    loadConfig("thesis_formatting_config_ieee", DEFAULT_CONFIG_IEEE),
+  );
+  const [configApa, setConfigApa] = useState<FormattingConfig>(() =>
+    loadConfig("thesis_formatting_config_apa", DEFAULT_CONFIG_APA),
+  );
   const CONFERENCE_CONFIG_VERSION = "v1";
   const loadConferenceConfig = (): ConferenceFormattingConfig => {
     const key = "thesis_conference_formatting_config";
@@ -269,13 +284,25 @@ export default function App() {
     useState<ConferenceFormattingConfig>(() => loadConferenceConfig());
 
   useEffect(() => {
-    localStorage.setItem("thesis_formatting_config_ieee", JSON.stringify(configIeee));
-    localStorage.setItem("thesis_formatting_config_ieee_version", CONFIG_VERSION);
+    localStorage.setItem(
+      "thesis_formatting_config_ieee",
+      JSON.stringify(configIeee),
+    );
+    localStorage.setItem(
+      "thesis_formatting_config_ieee_version",
+      CONFIG_VERSION,
+    );
   }, [configIeee]);
 
   useEffect(() => {
-    localStorage.setItem("thesis_formatting_config_apa", JSON.stringify(configApa));
-    localStorage.setItem("thesis_formatting_config_apa_version", CONFIG_VERSION);
+    localStorage.setItem(
+      "thesis_formatting_config_apa",
+      JSON.stringify(configApa),
+    );
+    localStorage.setItem(
+      "thesis_formatting_config_apa_version",
+      CONFIG_VERSION,
+    );
   }, [configApa]);
 
   useEffect(() => {
@@ -329,7 +356,8 @@ export default function App() {
     }
 
     const prev = { ...(citationStyle === "apa" ? configApa : configIeee) };
-    const defaults = citationStyle === "apa" ? DEFAULT_CONFIG_APA : DEFAULT_CONFIG_IEEE;
+    const defaults =
+      citationStyle === "apa" ? DEFAULT_CONFIG_APA : DEFAULT_CONFIG_IEEE;
 
     setFormattingConfig(defaults);
 
@@ -385,11 +413,16 @@ export default function App() {
   const processLogRef = useRef<HTMLDivElement | null>(null);
 
   const showToast = useCallback(
-    (msg: string, type: "success" | "error" = "success", actionLabel?: string, onAction?: () => void) => {
+    (
+      msg: string,
+      type: "success" | "error" = "success",
+      actionLabel?: string,
+      onAction?: () => void,
+    ) => {
       if (toastTimer.current) clearTimeout(toastTimer.current);
-      
+
       setToast({ id: Date.now(), msg, type, actionLabel, onAction });
-      
+
       toastTimer.current = setTimeout(() => {
         setToast(null);
         toastTimer.current = null;
@@ -482,7 +515,10 @@ export default function App() {
           }
         }
       } else {
-        pushProcessLog("info", "AI check disabled. Using local rule-based formatting.");
+        pushProcessLog(
+          "info",
+          "AI check disabled. Using local rule-based formatting.",
+        );
       }
 
       const runPreliminary = selectedSections.includes("preliminary");
@@ -860,7 +896,8 @@ export default function App() {
                       background: "var(--accent-subtle)",
                     }}
                   >
-                    <i className="fa-solid fa-wand-magic-sparkles text-xs" /> Formatting Styles
+                    <i className="fa-solid fa-wand-magic-sparkles text-xs" />{" "}
+                    Formatting Styles
                   </button>
                   <button
                     onClick={() => setPreviewOpen(true)}
@@ -1008,7 +1045,10 @@ export default function App() {
                     }}
                   >
                     {processLogs.length === 0 ? (
-                      <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                      <p
+                        className="text-xs"
+                        style={{ color: "var(--text-muted)" }}
+                      >
                         No process yet. Upload a file and run formatting.
                       </p>
                     ) : (
@@ -1081,7 +1121,8 @@ export default function App() {
                     className="mt-1.5 text-sm"
                     style={{ color: "var(--text-soft)" }}
                   >
-                    Normalizes document sections based on the selected formatting rule.
+                    Normalizes document sections based on the selected
+                    formatting rule.
                   </p>
                   <div className="mt-4 space-y-2.5">
                     {[
@@ -1112,13 +1153,13 @@ export default function App() {
                           style={
                             active
                               ? {
-                                background: "var(--accent-subtle)",
-                                borderColor: "var(--accent)",
-                              }
+                                  background: "var(--accent-subtle)",
+                                  borderColor: "var(--accent)",
+                                }
                               : {
-                                background: "var(--surface-raised)",
-                                borderColor: "var(--border)",
-                              }
+                                  background: "var(--surface-raised)",
+                                  borderColor: "var(--border)",
+                                }
                           }
                         >
                           <h3
@@ -1240,7 +1281,10 @@ export default function App() {
         >
           <div
             className="sheet-modal w-full max-w-2xl max-h-[90vh]"
-            style={{ background: "var(--surface)", borderColor: "var(--border)" }}
+            style={{
+              background: "var(--surface)",
+              borderColor: "var(--border)",
+            }}
           >
             <div
               className="flex items-center justify-between border-b px-6 py-4"
@@ -1263,7 +1307,10 @@ export default function App() {
                   >
                     Formatting Styles
                   </h2>
-                  <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--accent)" }}>
+                  <p
+                    className="text-xs font-semibold uppercase tracking-wider"
+                    style={{ color: "var(--accent)" }}
+                  >
                     Style: {activeStyleLabel}
                   </p>
                 </div>
@@ -1295,13 +1342,19 @@ export default function App() {
 
             <div
               className="px-6 py-4 border-t flex items-center justify-end gap-3"
-              style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+              style={{
+                borderColor: "var(--border)",
+                background: "var(--surface)",
+              }}
             >
               {isConfigChanged && (
                 <button
                   onClick={handleResetStyles}
                   className="rounded-2xl border px-5 py-2.5 text-xs font-bold transition hover:bg-black/5"
-                  style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}
+                  style={{
+                    borderColor: "var(--border)",
+                    color: "var(--text-muted)",
+                  }}
                   type="button"
                 >
                   Restore Defaults
@@ -1324,8 +1377,8 @@ export default function App() {
       )}
 
       {/* Styles Modal - Mobile */}
-      {isMobile && (
-        formattingStandard === "conference" ? (
+      {isMobile &&
+        (formattingStandard === "conference" ? (
           <MobileConferenceStylesSheet
             open={stylesModalOpen}
             onClose={() => setStylesModalOpen(false)}
@@ -1343,8 +1396,7 @@ export default function App() {
             citationStyle={citationStyle}
             onReset={handleResetStyles}
           />
-        )
-      )}
+        ))}
 
       {toast && (
         <Toast
@@ -1362,4 +1414,3 @@ export default function App() {
     </div>
   );
 }
-
