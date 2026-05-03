@@ -8,15 +8,14 @@ interface Props {
 }
 
 export default function SplashScreen({ onFinish }: Props) {
-  const [phase, setPhase] = useState<"enter" | "visible" | "exit">("enter");
+  // Start visible immediately — no enter phase to avoid flash of app content
+  const [phase, setPhase] = useState<"visible" | "exit">("visible");
 
   useEffect(() => {
-    const frame = requestAnimationFrame(() => setPhase("visible"));
     const exitTimer = window.setTimeout(() => setPhase("exit"), HOLD_MS);
     const finishTimer = window.setTimeout(onFinish, HOLD_MS + FADE_MS);
 
     return () => {
-      cancelAnimationFrame(frame);
       window.clearTimeout(exitTimer);
       window.clearTimeout(finishTimer);
     };
@@ -87,7 +86,8 @@ export default function SplashScreen({ onFinish }: Props) {
             radial-gradient(circle at 50% 28%, rgba(112, 230, 232, 0.27), transparent 34%),
             radial-gradient(circle at 12% 18%, rgba(234, 213, 141, 0.10), transparent 30%),
             linear-gradient(145deg, #08333d 0%, #062b35 46%, #020b13 100%);
-          opacity: 0;
+          /* Start fully visible — no fade-in to prevent app content flashing through */
+          opacity: 1;
           user-select: none;
           -webkit-user-select: none;
           transition: opacity ${FADE_MS}ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -307,7 +307,6 @@ export default function SplashScreen({ onFinish }: Props) {
       <div
         className={[
           "ef-splash",
-          phase === "visible" ? "ef-splash--visible" : "",
           phase === "exit" ? "ef-splash--exit" : "",
         ].join(" ")}
         role="status"
