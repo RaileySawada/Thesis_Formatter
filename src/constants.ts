@@ -227,3 +227,144 @@ export const CONFERENCE_FORMATS: {
       download: "publication_form_format.docx",
     },
   ];
+
+export type ConferenceTextAlignment = "left" | "center" | "right" | "both";
+
+export interface ConferenceTextStyle {
+  fontFamily: string;
+  fontSize: number;
+  lineSpacing: number;
+  alignment: ConferenceTextAlignment;
+  bold?: boolean;
+  italic?: boolean;
+  uppercase?: boolean;
+  titleCase?: boolean;
+}
+
+export interface PublicationBodyStyle extends ConferenceTextStyle {
+  spacingAfterPt: number;
+  firstLineIndentCm: number;
+}
+
+export interface PublicationReferencesStyle extends ConferenceTextStyle {
+  hangingIndentCm: number;
+  ieeeStyle: boolean;
+}
+
+export interface PublicationFormattingConfig {
+  heading1: ConferenceTextStyle;
+  heading2: ConferenceTextStyle;
+  body: PublicationBodyStyle;
+  references: PublicationReferencesStyle;
+}
+
+export interface AcmFormattingConfig {
+  title: ConferenceTextStyle;
+  subtitle: ConferenceTextStyle;
+  author: ConferenceTextStyle;
+  heading: ConferenceTextStyle;
+  body: ConferenceTextStyle;
+  references: ConferenceTextStyle;
+}
+
+export interface ConferenceFormattingConfig {
+  pubform: PublicationFormattingConfig;
+  acm: AcmFormattingConfig;
+}
+
+export const DEFAULT_PUBLICATION_FORMATTING_CONFIG: PublicationFormattingConfig = {
+  heading1: {
+    fontFamily: "Times New Roman",
+    fontSize: 10,
+    lineSpacing: 1.0,
+    alignment: "center",
+    bold: false,
+    italic: false,
+    uppercase: true,
+  },
+  heading2: {
+    fontFamily: "Times New Roman",
+    fontSize: 10,
+    lineSpacing: 1.0,
+    alignment: "left",
+    bold: false,
+    italic: true,
+    titleCase: true,
+  },
+  body: {
+    fontFamily: "Times New Roman",
+    fontSize: 10,
+    lineSpacing: 1.0,
+    alignment: "both",
+    bold: false,
+    italic: false,
+    spacingAfterPt: 6,
+    firstLineIndentCm: 0.51,
+  },
+  references: {
+    fontFamily: "Times New Roman",
+    fontSize: 8,
+    lineSpacing: 1.0,
+    alignment: "both",
+    bold: false,
+    italic: false,
+    hangingIndentCm: 0.62,
+    ieeeStyle: true,
+  },
+};
+
+export const DEFAULT_ACM_FORMATTING_CONFIG: AcmFormattingConfig = {
+  title: {
+    fontFamily: "Times New Roman",
+    fontSize: 18,
+    lineSpacing: 1.15,
+    alignment: "center",
+    bold: true,
+    italic: false,
+  },
+  subtitle: {
+    fontFamily: "Times New Roman",
+    fontSize: 11,
+    lineSpacing: 1.0,
+    alignment: "center",
+    bold: false,
+    italic: false,
+  },
+  author: {
+    fontFamily: "Times New Roman",
+    fontSize: 10,
+    lineSpacing: 1.0,
+    alignment: "center",
+    bold: true,
+    italic: false,
+  },
+  heading: {
+    fontFamily: "Times New Roman",
+    fontSize: 12,
+    lineSpacing: 1.05,
+    alignment: "left",
+    bold: true,
+    italic: false,
+  },
+  body: {
+    fontFamily: "Times New Roman",
+    fontSize: 10,
+    lineSpacing: 1.0,
+    alignment: "left",
+    bold: false,
+    italic: false,
+  },
+  references: {
+    fontFamily: "Times New Roman",
+    fontSize: 10,
+    lineSpacing: 1.0,
+    alignment: "left",
+    bold: false,
+    italic: false,
+  },
+};
+
+export const DEFAULT_CONFERENCE_FORMATTING_CONFIG: ConferenceFormattingConfig = {
+  pubform: DEFAULT_PUBLICATION_FORMATTING_CONFIG,
+  acm: DEFAULT_ACM_FORMATTING_CONFIG,
+};

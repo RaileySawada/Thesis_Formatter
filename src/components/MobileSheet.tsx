@@ -349,50 +349,51 @@ export default function MobileSheet({
             </div>
           )}
 
+          <div className="pt-2">
+            <p
+              className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em]"
+              style={{ color: "var(--text-muted)" }}
+            >
+              <i className="fa-solid fa-screwdriver-wrench mr-1" /> Quick Tools
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  handleClose();
+                  setTimeout(onOpenStyles, 350);
+                }}
+                className="flex-1 flex items-center justify-center gap-2 rounded-2xl border px-4 py-3.5 text-xs font-bold transition active:scale-95"
+                style={{
+                  borderColor: "var(--border)",
+                  color: "var(--accent)",
+                  background: "var(--accent-subtle)",
+                }}
+              >
+                <i className="fa-solid fa-wand-magic-sparkles" />
+                Styles
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  handleClose();
+                  setTimeout(onOpenPreview, 350);
+                }}
+                className="flex-1 flex items-center justify-center gap-2 rounded-2xl border px-4 py-3.5 text-xs font-bold transition active:scale-95"
+                style={{
+                  borderColor: "var(--border)",
+                  color: "var(--text-secondary)",
+                  background: "var(--surface-raised)",
+                }}
+              >
+                <i className="fa-solid fa-eye" />
+                Preview
+              </button>
+            </div>
+          </div>
+
           {formattingStandard === "ccc" && (
             <>
-              <div className="pt-2">
-                <p
-                  className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em]"
-                  style={{ color: "var(--text-muted)" }}
-                >
-                  <i className="fa-solid fa-screwdriver-wrench mr-1" /> Quick Tools
-                </p>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleClose();
-                      setTimeout(onOpenStyles, 350);
-                    }}
-                    className="flex-1 flex items-center justify-center gap-2 rounded-2xl border px-4 py-3.5 text-xs font-bold transition active:scale-95"
-                    style={{
-                      borderColor: "var(--border)",
-                      color: "var(--accent)",
-                      background: "var(--accent-subtle)",
-                    }}
-                  >
-                    <i className="fa-solid fa-wand-magic-sparkles" />
-                    Styles
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleClose();
-                      setTimeout(onOpenPreview, 350);
-                    }}
-                    className="flex-1 flex items-center justify-center gap-2 rounded-2xl border px-4 py-3.5 text-xs font-bold transition active:scale-95"
-                    style={{
-                      borderColor: "var(--border)",
-                      color: "var(--text-secondary)",
-                      background: "var(--surface-raised)",
-                    }}
-                  >
-                    <i className="fa-solid fa-eye" />
-                    Preview
-                  </button>
-                </div>
-              </div>
 
               <div>
                 <p
@@ -572,6 +573,7 @@ export default function MobileSheet({
               </div>
             </>
           )}
+
         </div>
 
         <div

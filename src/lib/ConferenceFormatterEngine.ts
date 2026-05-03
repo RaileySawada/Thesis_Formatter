@@ -1,9 +1,17 @@
-import type { ConferenceFormat } from "../constants";
+import {
+  DEFAULT_CONFERENCE_FORMATTING_CONFIG,
+  type AcmFormattingConfig,
+  type ConferenceFormat,
+  type ConferenceFormattingConfig,
+  type ConferenceTextStyle,
+  type PublicationFormattingConfig,
+} from "../constants";
 import { requestPollinations } from "./pollinationsClient";
 import { isAiAssistEnabled } from "./aiAssist";
 
 interface ConferenceFormatOptions {
   format: ConferenceFormat;
+  styleConfig?: ConferenceFormattingConfig;
 }
 
 interface AuthorEntry {
@@ -762,12 +770,28 @@ function linesToTwips(lines: number): number {
   return Math.round(lines * 240);
 }
 
+function ptToTwips(pt: number): number {
+  return Math.round(pt * 20);
+}
+
+function cmToTwips(cm: number): number {
+  return Math.round((cm / 2.54) * 1440);
+}
+
+interface ParagraphIndentOptions {
+  firstLineTwips?: number;
+  hangingTwips?: number;
+  leftTwips?: number;
+  rightTwips?: number;
+}
+
 function writeParagraphLayout(
   p: Element,
   wNs: string,
   alignment: "left" | "center" | "right" | "both",
   lineSpacing: number,
   afterTwips: number,
+  beforeTwips = 0,
 ) {
   const pPr = ensurePPr(p, wNs);
   removeChildren(pPr, wNs, "jc");
@@ -777,12 +801,54 @@ function writeParagraphLayout(
   setWAttr(jc, wNs, "val", alignment);
 
   const sp = ensureChild(pPr, wNs, "spacing");
-  setWAttr(sp, wNs, "before", "0");
+  setWAttr(sp, wNs, "before", String(beforeTwips));
   setWAttr(sp, wNs, "after", String(afterTwips));
   setWAttr(sp, wNs, "line", String(linesToTwips(lineSpacing)));
   setWAttr(sp, wNs, "lineRule", "auto");
   setWAttr(sp, wNs, "beforeAutospacing", "0");
   setWAttr(sp, wNs, "afterAutospacing", "0");
+}
+
+function writeParagraphIndent(
+  p: Element,
+  wNs: string,
+  indent?: ParagraphIndentOptions,
+) {
+  const pPr = ensurePPr(p, wNs);
+  removeChildren(pPr, wNs, "ind");
+  if (!indent) return;
+
+  const hasAny =
+    typeof indent.firstLineTwips === "number" ||
+    typeof indent.hangingTwips === "number" ||
+    typeof indent.leftTwips === "number" ||
+    typeof indent.rightTwips === "number";
+  if (!hasAny) return;
+
+  const ind = ensureChild(pPr, wNs, "ind");
+
+  if (typeof indent.leftTwips === "number") {
+    setWAttr(ind, wNs, "left", String(Math.max(0, Math.round(indent.leftTwips))));
+  }
+  if (typeof indent.rightTwips === "number") {
+    setWAttr(ind, wNs, "right", String(Math.max(0, Math.round(indent.rightTwips))));
+  }
+  if (typeof indent.firstLineTwips === "number") {
+    setWAttr(
+      ind,
+      wNs,
+      "firstLine",
+      String(Math.max(0, Math.round(indent.firstLineTwips))),
+    );
+  }
+  if (typeof indent.hangingTwips === "number") {
+    setWAttr(
+      ind,
+      wNs,
+      "hanging",
+      String(Math.max(0, Math.round(indent.hangingTwips))),
+    );
+  }
 }
 
 function writeRunFormatting(
@@ -832,6 +898,227 @@ function writeRunFormatting(
   }
 }
 
+function applyTextStyle(
+  p: Element,
+  wNs: string,
+  style: ConferenceTextStyle,
+  afterTwips = 0,
+) {
+  writeParagraphLayout(
+    p,
+    wNs,
+    style.alignment,
+    style.lineSpacing,
+    afterTwips,
+  );
+  writeRunFormatting(
+    p,
+    wNs,
+    style.fontFamily,
+    style.fontSize,
+    !!style.bold,
+    !!style.italic,
+  );
+}
+
+function cloneDeep<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function mergeDeep<T>(defaults: T, source: unknown): T {
+  if (!source || typeof source !== "object" || Array.isArray(source)) {
+    return cloneDeep(defaults);
+  }
+
+  const out: any = { ...(defaults as any) };
+  const src = source as Record<string, unknown>;
+  for (const key of Object.keys(defaults as Record<string, unknown>)) {
+    const baseValue = (defaults as Record<string, unknown>)[key];
+    const sourceValue = src[key];
+    if (
+      baseValue &&
+      typeof baseValue === "object" &&
+      !Array.isArray(baseValue)
+    ) {
+      out[key] = mergeDeep(baseValue, sourceValue);
+      continue;
+    }
+    out[key] = sourceValue === undefined ? baseValue : sourceValue;
+  }
+  return out as T;
+}
+
+function resolveConferenceStyleConfig(
+  styleConfig?: ConferenceFormattingConfig,
+): ConferenceFormattingConfig {
+  return mergeDeep(DEFAULT_CONFERENCE_FORMATTING_CONFIG, styleConfig);
+}
+
+function isPublicationHeading1(text: string): boolean {
+  const normalized = normalizeText(text);
+  if (!normalized) return false;
+  // Top-level publication headings use Roman numerals (I, II, III, IV, V...).
+  // Restricting to I/V/X avoids colliding with lettered sub-headings like "C. ...".
+  if (/^[IVX]+\.\s+[A-Za-z]/iu.test(normalized)) return true;
+  return /^REFERENCES$/iu.test(normalized);
+}
+
+function isPublicationHeading2(text: string): boolean {
+  const normalized = normalizeText(text);
+  if (!/^[A-Z]\.\s+\S/u.test(normalized)) return false;
+  if (/[,;:]/u.test(normalized)) return false;
+  if (/\bhttps?:\/\//iu.test(normalized)) return false;
+  if (/@/u.test(normalized)) return false;
+  if (/\bdoi\b/iu.test(normalized)) return false;
+  if (normalized.length > 100) return false;
+  return true;
+}
+
+function isPublicationReferencesHeading(text: string): boolean {
+  const normalized = normalizeText(text).replace(/^[IVXLCDM]+\.\s*/iu, "").trim();
+  return normalized.toUpperCase() === "REFERENCES";
+}
+
+function isLikelyPublicationCaption(text: string): boolean {
+  return /^figure\s+\d+/iu.test(text) || /^table\s+\d+/iu.test(text);
+}
+
+function toHeading2TitleCaseWord(token: string): string {
+  if (!/[A-Za-z]/u.test(token)) return token;
+  if (/\d/u.test(token)) return token;
+  if (/^[A-Z]{2,4}$/u.test(token)) return token;
+
+  const parts = token.split(/([\-\/])/u);
+  return parts
+    .map((part) => {
+      if (part === "-" || part === "/") return part;
+      if (!/[A-Za-z]/u.test(part)) return part;
+      return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+    })
+    .join("");
+}
+
+function normalizePublicationHeading2(text: string): string {
+  const normalized = normalizeText(text);
+  const match = normalized.match(/^([A-Z]\.)\s+(.+)$/u);
+  if (!match) return normalized;
+
+  const marker = match[1];
+  const content = match[2]
+    .split(/\s+/u)
+    .map((token) => toHeading2TitleCaseWord(token))
+    .join(" ");
+
+  return `${marker} ${content}`;
+}
+
+function normalizeIeeeReferenceMarker(text: string): string {
+  const normalized = normalizeText(text);
+  let m = normalized.match(/^\[(\d{1,3})\]\s*(.*)$/u);
+  if (m) return `[${m[1]}] ${m[2]}`.trimEnd();
+  m = normalized.match(/^\((\d{1,3})\)\s*(.*)$/u);
+  if (m) return `[${m[1]}] ${m[2]}`.trimEnd();
+  m = normalized.match(/^(\d{1,3})(?:[.)])?\s+(.*)$/u);
+  if (m) return `[${m[1]}] ${m[2]}`.trimEnd();
+  return text;
+}
+
+function applyPublicationRuleBasedFormatting(
+  doc: Document,
+  styleConfig: PublicationFormattingConfig,
+) {
+  const wNs = resolveWNs(doc);
+  const body = getBody(doc, wNs);
+  if (!body) return;
+
+  const paragraphs = Array.from(body.getElementsByTagNameNS(wNs, "p"));
+  const abstractIndex = paragraphs.findIndex((p) =>
+    /^abstract\b/iu.test(normalizeText(getParagraphText(p, wNs))),
+  );
+  const startIndex = abstractIndex >= 0 ? abstractIndex + 1 : 0;
+
+  let inReferences = false;
+  let referenceIndex = 0;
+
+  for (let i = startIndex; i < paragraphs.length; i += 1) {
+    const p = paragraphs[i];
+    const rawText = getParagraphText(p, wNs);
+    const text = normalizeText(rawText);
+    if (!text) continue;
+
+    if (/^keywords\b/iu.test(text) || /^keywords[-—]/iu.test(text)) {
+      continue;
+    }
+
+    if (inReferences) {
+      let ieeeText = text;
+      if (styleConfig.references.ieeeStyle) {
+        const normalized = normalizeText(text);
+        const normalizedWithMarker = normalizeIeeeReferenceMarker(normalized);
+        const markerMatch = normalizedWithMarker.match(/^\[(\d{1,3})\]\s+/u);
+        if (markerMatch) {
+          const markerNum = Number(markerMatch[1]);
+          if (!Number.isNaN(markerNum) && markerNum > 0) {
+            referenceIndex = Math.max(referenceIndex, markerNum);
+          } else {
+            referenceIndex += 1;
+          }
+          ieeeText = normalizedWithMarker;
+        } else {
+          referenceIndex += 1;
+          ieeeText = `[${referenceIndex}] ${normalized}`;
+        }
+      }
+      if (ieeeText !== text) {
+        setParagraphText(p, wNs, ieeeText);
+      }
+      applyTextStyle(p, wNs, styleConfig.references, 0);
+      writeParagraphIndent(p, wNs, {
+        hangingTwips: cmToTwips(styleConfig.references.hangingIndentCm),
+      });
+      continue;
+    }
+
+    if (isPublicationHeading1(text)) {
+      const heading = styleConfig.heading1.uppercase ? text.toUpperCase() : text;
+      if (heading !== text) {
+        setParagraphText(p, wNs, heading);
+      }
+      applyTextStyle(p, wNs, styleConfig.heading1, 0);
+      writeParagraphIndent(p, wNs);
+
+      inReferences = isPublicationReferencesHeading(heading);
+      continue;
+    }
+
+    if (!inReferences && isPublicationHeading2(text)) {
+      const heading2 = styleConfig.heading2.titleCase
+        ? normalizePublicationHeading2(text)
+        : text;
+      if (heading2 !== text) {
+        setParagraphText(p, wNs, heading2);
+      }
+      applyTextStyle(p, wNs, styleConfig.heading2, 0);
+      writeParagraphIndent(p, wNs);
+      continue;
+    }
+
+    if (isLikelyPublicationCaption(text)) {
+      continue;
+    }
+
+    applyTextStyle(
+      p,
+      wNs,
+      styleConfig.body,
+      ptToTwips(styleConfig.body.spacingAfterPt),
+    );
+    writeParagraphIndent(p, wNs, {
+      firstLineTwips: cmToTwips(styleConfig.body.firstLineIndentCm),
+    });
+  }
+}
+
 function enforceSingleColumnNoHeaderFooter(body: Element, wNs: string) {
   const sectPrNodes = Array.from(body.getElementsByTagNameNS(wNs, "sectPr"));
   for (const sectPr of sectPrNodes) {
@@ -865,7 +1152,10 @@ function isLikelyAuthorLine(text: string): boolean {
   );
 }
 
-function applyAcmRuleBasedFormatting(doc: Document) {
+function applyAcmRuleBasedFormatting(
+  doc: Document,
+  styleConfig: AcmFormattingConfig,
+) {
   const wNs = resolveWNs(doc);
   const body = getBody(doc, wNs);
   if (!body) return;
@@ -875,37 +1165,34 @@ function applyAcmRuleBasedFormatting(doc: Document) {
   const paragraphs = Array.from(body.getElementsByTagNameNS(wNs, "p"));
   let nonEmptyCount = 0;
   let inFrontMatter = true;
+  let inReferences = false;
 
   for (const p of paragraphs) {
     const text = normalizeText(getParagraphText(p, wNs));
 
     if (text === "") {
-      writeParagraphLayout(p, wNs, "left", 1.0, 0);
+      applyTextStyle(p, wNs, styleConfig.body, 0);
       continue;
     }
 
     nonEmptyCount += 1;
 
     if (nonEmptyCount === 1) {
-      writeParagraphLayout(p, wNs, "center", 1.15, 120);
-      writeRunFormatting(p, wNs, "Times New Roman", 18, true, false);
+      applyTextStyle(p, wNs, styleConfig.title, 120);
       continue;
     }
     if (nonEmptyCount === 2) {
-      writeParagraphLayout(p, wNs, "center", 1.0, 80);
-      writeRunFormatting(p, wNs, "Times New Roman", 9, false, true);
+      applyTextStyle(p, wNs, styleConfig.subtitle, 80);
       continue;
     }
     if (nonEmptyCount === 3) {
-      writeParagraphLayout(p, wNs, "center", 1.0, 120);
-      writeRunFormatting(p, wNs, "Times New Roman", 11, false, false);
+      applyTextStyle(p, wNs, styleConfig.subtitle, 120);
       continue;
     }
 
     if (/^abstract\b/iu.test(text) || /^abstract[-—]/iu.test(text)) {
       inFrontMatter = false;
-      writeParagraphLayout(p, wNs, "both", 1.0, 120);
-      writeRunFormatting(p, wNs, "Times New Roman", 10, false, false);
+      applyTextStyle(p, wNs, styleConfig.body, 120);
       continue;
     }
 
@@ -914,32 +1201,35 @@ function applyAcmRuleBasedFormatting(doc: Document) {
       /^additional keywords/iu.test(text) ||
       /^acm reference format/iu.test(text)
     ) {
-      writeParagraphLayout(p, wNs, "left", 1.0, 100);
-      writeRunFormatting(p, wNs, "Times New Roman", 10, false, false);
+      applyTextStyle(p, wNs, styleConfig.body, 100);
       continue;
     }
 
     if (inFrontMatter && nonEmptyCount <= 12 && isLikelyAuthorLine(text)) {
-      if (text.includes("@")) {
-        writeParagraphLayout(p, wNs, "center", 1.0, 60);
-        writeRunFormatting(p, wNs, "Times New Roman", 9, false, false);
-      } else {
-        writeParagraphLayout(p, wNs, "center", 1.0, 60);
-        writeRunFormatting(p, wNs, "Times New Roman", 10, true, false);
-      }
+      applyTextStyle(p, wNs, styleConfig.author, 60);
+      continue;
+    }
+
+    if (/^references$/iu.test(text)) {
+      inFrontMatter = false;
+      inReferences = true;
+      applyTextStyle(p, wNs, styleConfig.heading, 90);
+      continue;
+    }
+
+    if (inReferences) {
+      applyTextStyle(p, wNs, styleConfig.references, 90);
       continue;
     }
 
     if (isLikelyAcmHeading(text)) {
       inFrontMatter = false;
-      writeParagraphLayout(p, wNs, "left", 1.05, 90);
-      writeRunFormatting(p, wNs, "Times New Roman", 12, true, false);
+      applyTextStyle(p, wNs, styleConfig.heading, 90);
       continue;
     }
 
     inFrontMatter = false;
-    writeParagraphLayout(p, wNs, "left", 1.0, 90);
-    writeRunFormatting(p, wNs, "Times New Roman", 10, false, false);
+    applyTextStyle(p, wNs, styleConfig.body, 90);
   }
 }
 
@@ -954,7 +1244,11 @@ function serializeDoc(doc: Document): string {
   return new XMLSerializer().serializeToString(doc);
 }
 
-async function applyPublicationTemplate(inputZip: any, pubformZip: any): Promise<void> {
+async function applyPublicationTemplate(
+  inputZip: any,
+  pubformZip: any,
+  styleConfig: PublicationFormattingConfig,
+): Promise<void> {
   const inputDoc = await parseDocFromZip(inputZip, "word/document.xml");
   const templateDoc = await parseDocFromZip(pubformZip, "word/document.xml");
   const templateStylesDoc = await parseDocFromZip(pubformZip, "word/styles.xml");
@@ -1107,6 +1401,7 @@ async function applyPublicationTemplate(inputZip: any, pubformZip: any): Promise
     );
   }
 
+  applyPublicationRuleBasedFormatting(templateDoc, styleConfig);
   pubformZip.file("word/document.xml", serializeDoc(templateDoc));
 }
 
@@ -1116,7 +1411,10 @@ function requireJsZip() {
   return JSZip;
 }
 
-export async function formatDocxPublication(arrayBuffer: ArrayBuffer): Promise<Blob> {
+export async function formatDocxPublication(
+  arrayBuffer: ArrayBuffer,
+  styleConfig: PublicationFormattingConfig,
+): Promise<Blob> {
   const JSZip = requireJsZip();
   const [inputZip, pubformResponse] = await Promise.all([
     JSZip.loadAsync(arrayBuffer),
@@ -1126,11 +1424,14 @@ export async function formatDocxPublication(arrayBuffer: ArrayBuffer): Promise<B
     throw new Error("Unable to load publication format source file.");
   }
   const pubformZip = await JSZip.loadAsync(await pubformResponse.arrayBuffer());
-  await applyPublicationTemplate(inputZip, pubformZip);
+  await applyPublicationTemplate(inputZip, pubformZip, styleConfig);
   return pubformZip.generateAsync({ type: "blob" }) as Promise<Blob>;
 }
 
-export async function formatDocxAcm(arrayBuffer: ArrayBuffer): Promise<Blob> {
+export async function formatDocxAcm(
+  arrayBuffer: ArrayBuffer,
+  styleConfig: AcmFormattingConfig,
+): Promise<Blob> {
   const JSZip = requireJsZip();
   const [targetZip, acmResponse] = await Promise.all([
     JSZip.loadAsync(arrayBuffer),
@@ -1144,7 +1445,7 @@ export async function formatDocxAcm(arrayBuffer: ArrayBuffer): Promise<Blob> {
   await acmResponse.arrayBuffer();
 
   const targetDoc = await parseDocFromZip(targetZip, "word/document.xml");
-  applyAcmRuleBasedFormatting(targetDoc);
+  applyAcmRuleBasedFormatting(targetDoc, styleConfig);
   targetZip.file("word/document.xml", serializeDoc(targetDoc));
 
   return targetZip.generateAsync({ type: "blob" }) as Promise<Blob>;
@@ -1154,8 +1455,9 @@ export async function formatDocxConference(
   arrayBuffer: ArrayBuffer,
   options: ConferenceFormatOptions,
 ): Promise<Blob> {
+  const resolvedConfig = resolveConferenceStyleConfig(options.styleConfig);
   if (options.format === "pubform") {
-    return formatDocxPublication(arrayBuffer);
+    return formatDocxPublication(arrayBuffer, resolvedConfig.pubform);
   }
-  return formatDocxAcm(arrayBuffer);
+  return formatDocxAcm(arrayBuffer, resolvedConfig.acm);
 }

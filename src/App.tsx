@@ -9,6 +9,9 @@ import {
   DEFAULT_CONFIG_IEEE,
   DEFAULT_CONFIG_APA,
   CONFERENCE_FORMATS,
+  DEFAULT_CONFERENCE_FORMATTING_CONFIG,
+  DEFAULT_PUBLICATION_FORMATTING_CONFIG,
+  DEFAULT_ACM_FORMATTING_CONFIG,
 } from "./constants";
 import type {
   ToastMsg,
@@ -16,14 +19,17 @@ import type {
   FormattingConfig,
   FormattingStandard,
   ConferenceFormat,
+  ConferenceFormattingConfig,
 } from "./constants";
 import Sidebar from "./components/Sidebar";
 import FormattingConfigPanel from "./components/FormattingConfigPanel";
+import ConferenceFormattingPanel from "./components/ConferenceFormattingPanel";
 import UploadZone from "./components/UploadZone";
 import StatusPanel from "./components/StatusPanel";
 import MobileSheet from "./components/MobileSheet";
 import PreviewModal from "./components/PreviewModal";
 import MobileStylesSheet from "./components/MobileStylesSheet";
+import MobileConferenceStylesSheet from "./components/MobileConferenceStylesSheet";
 import Toast from "./components/Toast";
 import { requestPollinations } from "./lib/pollinationsClient";
 import { isAiAssistEnabled } from "./lib/aiAssist";
@@ -49,6 +55,35 @@ function formatDuration(ms: number): string {
 
 function formatLogTime(date = new Date()): string {
   return date.toLocaleTimeString([], { hour12: false });
+}
+
+function cloneDeep<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function mergeDeep<T>(defaults: T, source: unknown): T {
+  if (!source || typeof source !== "object" || Array.isArray(source)) {
+    return cloneDeep(defaults);
+  }
+
+  const out: any = Array.isArray(defaults) ? [] : { ...(defaults as any) };
+  const src = source as Record<string, unknown>;
+
+  for (const key of Object.keys(defaults as Record<string, unknown>)) {
+    const baseValue = (defaults as Record<string, unknown>)[key];
+    const sourceValue = src[key];
+    if (
+      baseValue &&
+      typeof baseValue === "object" &&
+      !Array.isArray(baseValue)
+    ) {
+      out[key] = mergeDeep(baseValue, sourceValue);
+      continue;
+    }
+    out[key] = sourceValue === undefined ? baseValue : sourceValue;
+  }
+
+  return out as T;
 }
 
 function toUserSafeErrorMessage(error: unknown): string {
@@ -210,6 +245,28 @@ export default function App() {
 
   const [configIeee, setConfigIeee] = useState<FormattingConfig>(() => loadConfig("thesis_formatting_config_ieee", DEFAULT_CONFIG_IEEE));
   const [configApa, setConfigApa] = useState<FormattingConfig>(() => loadConfig("thesis_formatting_config_apa", DEFAULT_CONFIG_APA));
+  const CONFERENCE_CONFIG_VERSION = "v1";
+  const loadConferenceConfig = (): ConferenceFormattingConfig => {
+    const key = "thesis_conference_formatting_config";
+    const saved = localStorage.getItem(key);
+    const savedVersion = localStorage.getItem(`${key}_version`);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        const merged = mergeDeep(DEFAULT_CONFERENCE_FORMATTING_CONFIG, parsed);
+        localStorage.setItem(`${key}_version`, CONFERENCE_CONFIG_VERSION);
+        return merged;
+      } catch {
+        // fall through to defaults
+      }
+    }
+    if (savedVersion !== CONFERENCE_CONFIG_VERSION) {
+      localStorage.setItem(`${key}_version`, CONFERENCE_CONFIG_VERSION);
+    }
+    return cloneDeep(DEFAULT_CONFERENCE_FORMATTING_CONFIG);
+  };
+  const [conferenceFormattingConfig, setConferenceFormattingConfig] =
+    useState<ConferenceFormattingConfig>(() => loadConferenceConfig());
 
   useEffect(() => {
     localStorage.setItem("thesis_formatting_config_ieee", JSON.stringify(configIeee));
@@ -221,20 +278,61 @@ export default function App() {
     localStorage.setItem("thesis_formatting_config_apa_version", CONFIG_VERSION);
   }, [configApa]);
 
+  useEffect(() => {
+    localStorage.setItem(
+      "thesis_conference_formatting_config",
+      JSON.stringify(conferenceFormattingConfig),
+    );
+    localStorage.setItem(
+      "thesis_conference_formatting_config_version",
+      CONFERENCE_CONFIG_VERSION,
+    );
+  }, [conferenceFormattingConfig]);
+
   const formattingConfig = citationStyle === "apa" ? configApa : configIeee;
   const setFormattingConfig = (newConfig: FormattingConfig) => {
     if (citationStyle === "apa") setConfigApa(newConfig);
     else setConfigIeee(newConfig);
   };
 
-  const isConfigChanged = JSON.stringify(formattingConfig) !== JSON.stringify(citationStyle === "apa" ? DEFAULT_CONFIG_APA : DEFAULT_CONFIG_IEEE);
+  const activeConferenceDefaults =
+    conferenceFormat === "pubform"
+      ? DEFAULT_PUBLICATION_FORMATTING_CONFIG
+      : DEFAULT_ACM_FORMATTING_CONFIG;
+  const activeConferenceConfig = conferenceFormattingConfig[conferenceFormat];
+
+  const isConfigChanged =
+    formattingStandard === "conference"
+      ? JSON.stringify(activeConferenceConfig) !==
+        JSON.stringify(activeConferenceDefaults)
+      : JSON.stringify(formattingConfig) !==
+        JSON.stringify(
+          citationStyle === "apa" ? DEFAULT_CONFIG_APA : DEFAULT_CONFIG_IEEE,
+        );
 
   const handleResetStyles = () => {
+    if (formattingStandard === "conference") {
+      const prev = cloneDeep(conferenceFormattingConfig);
+      const defaults =
+        conferenceFormat === "pubform"
+          ? cloneDeep(DEFAULT_PUBLICATION_FORMATTING_CONFIG)
+          : cloneDeep(DEFAULT_ACM_FORMATTING_CONFIG);
+      setConferenceFormattingConfig((current) => ({
+        ...current,
+        [conferenceFormat]: defaults,
+      }));
+      showToast("Styles restored to defaults.", "success", "Undo", () => {
+        setConferenceFormattingConfig(prev);
+        showToast("Restoration undone.");
+      });
+      return;
+    }
+
     const prev = { ...(citationStyle === "apa" ? configApa : configIeee) };
     const defaults = citationStyle === "apa" ? DEFAULT_CONFIG_APA : DEFAULT_CONFIG_IEEE;
-    
+
     setFormattingConfig(defaults);
-    
+
     showToast("Styles restored to defaults.", "success", "Undo", () => {
       setFormattingConfig(prev);
       showToast("Restoration undone.");
@@ -404,6 +502,7 @@ export default function App() {
         );
         blob = await formatDocxConference(currentBuffer, {
           format: conferenceFormat,
+          styleConfig: conferenceFormattingConfig,
         });
         pushProcessLog("success", `${conferenceLabel} formatting completed.`);
       } else {
@@ -492,6 +591,7 @@ export default function App() {
     enabledRules,
     formattingStandard,
     conferenceFormat,
+    conferenceFormattingConfig,
     citationStyle,
     showToast,
     formattingConfig,
@@ -529,6 +629,12 @@ export default function App() {
   const activeConferenceFormat =
     CONFERENCE_FORMATS.find((fmt) => fmt.value === conferenceFormat) ??
     CONFERENCE_FORMATS[0];
+  const activeStyleLabel =
+    formattingStandard === "conference"
+      ? activeConferenceFormat.label
+      : citationStyle === "apa"
+        ? "APA 7th Edition"
+        : "IEEE";
 
   const theme = isDark ? "dark" : "light";
 
@@ -745,32 +851,28 @@ export default function App() {
                       </div>
                     )}
                   </div>
-                  {formattingStandard === "ccc" && (
-                    <>
-                      <button
-                        onClick={() => setStylesModalOpen(true)}
-                        className="inline-flex items-center gap-1.5 rounded-2xl border px-4 py-2.5 text-xs font-semibold transition hover:opacity-80"
-                        style={{
-                          borderColor: "var(--border)",
-                          color: "var(--accent)",
-                          background: "var(--accent-subtle)",
-                        }}
-                      >
-                        <i className="fa-solid fa-wand-magic-sparkles text-xs" /> Formatting Styles
-                      </button>
-                      <button
-                        onClick={() => setPreviewOpen(true)}
-                        className="inline-flex items-center gap-1.5 rounded-2xl border px-4 py-2.5 text-xs font-semibold transition hover:opacity-80"
-                        style={{
-                          borderColor: "var(--border)",
-                          color: "var(--text-soft)",
-                          background: "var(--surface-raised)",
-                        }}
-                      >
-                        <i className="fa-solid fa-eye text-xs" /> Preview Rules
-                      </button>
-                    </>
-                  )}
+                  <button
+                    onClick={() => setStylesModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 rounded-2xl border px-4 py-2.5 text-xs font-semibold transition hover:opacity-80"
+                    style={{
+                      borderColor: "var(--border)",
+                      color: "var(--accent)",
+                      background: "var(--accent-subtle)",
+                    }}
+                  >
+                    <i className="fa-solid fa-wand-magic-sparkles text-xs" /> Formatting Styles
+                  </button>
+                  <button
+                    onClick={() => setPreviewOpen(true)}
+                    className="inline-flex items-center gap-1.5 rounded-2xl border px-4 py-2.5 text-xs font-semibold transition hover:opacity-80"
+                    style={{
+                      borderColor: "var(--border)",
+                      color: "var(--text-soft)",
+                      background: "var(--surface-raised)",
+                    }}
+                  >
+                    <i className="fa-solid fa-eye text-xs" /> Preview Rules
+                  </button>
                 </div>
               </div>
 
@@ -1118,7 +1220,14 @@ export default function App() {
         onOpenStyles={() => setStylesModalOpen(true)}
         onOpenPreview={() => setPreviewOpen(true)}
       />
-      <PreviewModal open={previewOpen} onClose={() => setPreviewOpen(false)} />
+      <PreviewModal
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        formattingStandard={formattingStandard}
+        citationStyle={citationStyle}
+        conferenceFormat={conferenceFormat}
+        conferenceConfig={conferenceFormattingConfig}
+      />
 
       {/* Styles Modal - Desktop */}
       {!isMobile && stylesModalOpen && (
@@ -1155,7 +1264,7 @@ export default function App() {
                     Formatting Styles
                   </h2>
                   <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--accent)" }}>
-                    Style: {citationStyle === "apa" ? "APA 7th Edition" : "IEEE"}
+                    Style: {activeStyleLabel}
                   </p>
                 </div>
               </div>
@@ -1169,11 +1278,19 @@ export default function App() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
-              <FormattingConfigPanel
-                config={formattingConfig}
-                onChange={setFormattingConfig}
-                citationStyle={citationStyle}
-              />
+              {formattingStandard === "conference" ? (
+                <ConferenceFormattingPanel
+                  format={conferenceFormat}
+                  config={conferenceFormattingConfig}
+                  onChange={setConferenceFormattingConfig}
+                />
+              ) : (
+                <FormattingConfigPanel
+                  config={formattingConfig}
+                  onChange={setFormattingConfig}
+                  citationStyle={citationStyle}
+                />
+              )}
             </div>
 
             <div
@@ -1208,14 +1325,25 @@ export default function App() {
 
       {/* Styles Modal - Mobile */}
       {isMobile && (
-        <MobileStylesSheet
-          open={stylesModalOpen}
-          onClose={() => setStylesModalOpen(false)}
-          config={formattingConfig}
-          onChange={setFormattingConfig}
-          citationStyle={citationStyle}
-          onReset={handleResetStyles}
-        />
+        formattingStandard === "conference" ? (
+          <MobileConferenceStylesSheet
+            open={stylesModalOpen}
+            onClose={() => setStylesModalOpen(false)}
+            format={conferenceFormat}
+            config={conferenceFormattingConfig}
+            onChange={setConferenceFormattingConfig}
+            onReset={handleResetStyles}
+          />
+        ) : (
+          <MobileStylesSheet
+            open={stylesModalOpen}
+            onClose={() => setStylesModalOpen(false)}
+            config={formattingConfig}
+            onChange={setFormattingConfig}
+            citationStyle={citationStyle}
+            onReset={handleResetStyles}
+          />
+        )
       )}
 
       {toast && (

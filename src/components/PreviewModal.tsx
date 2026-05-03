@@ -1,12 +1,27 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type {
+  CitationStyle,
+  ConferenceFormat,
+  ConferenceFormattingConfig,
+  FormattingStandard,
+} from "../constants";
 
-// ── PreviewModal ─────────────────────────────────────────────────────────────
+type RuleItem = [string, string, string];
 
-const PREVIEW_RULES: [string, string, string][] = [
+interface PreviewProps {
+  open: boolean;
+  onClose: () => void;
+  formattingStandard: FormattingStandard;
+  citationStyle: CitationStyle;
+  conferenceFormat: ConferenceFormat;
+  conferenceConfig: ConferenceFormattingConfig;
+}
+
+const CCC_PREVIEW_RULES = (citationStyle: CitationStyle): RuleItem[] => [
   [
     "fa-font",
     "Font & Size",
-    "Garamond — 14pt titles, 13pt headings, 12pt body, 11pt references.",
+    "Garamond - 14pt titles, 13pt headings, 12pt body, 11pt references.",
   ],
   [
     "fa-text-height",
@@ -26,7 +41,7 @@ const PREVIEW_RULES: [string, string, string][] = [
   [
     "fa-image",
     "Captions",
-    "Centered figure captions; left-aligned table captions — both end with a period.",
+    "Centered figure captions; left-aligned table captions, both ending with a period.",
   ],
   [
     "fa-table",
@@ -36,18 +51,106 @@ const PREVIEW_RULES: [string, string, string][] = [
   [
     "fa-book-bookmark",
     "References",
-    "Garamond 11pt, 1.0× spacing, hanging indent 1.27 cm.",
+    citationStyle === "apa"
+      ? "APA author-date style with configured spacing and hanging indent."
+      : "IEEE numbered style with configured spacing and hanging indent.",
   ],
 ];
 
-interface PreviewProps {
-  open: boolean;
-  onClose: () => void;
+function alignLabel(alignment: string): string {
+  if (alignment === "both") return "justified";
+  return alignment;
 }
 
-export function PreviewModal({ open, onClose }: PreviewProps) {
+function conferencePreviewRules(
+  conferenceFormat: ConferenceFormat,
+  conferenceConfig: ConferenceFormattingConfig,
+): RuleItem[] {
+  if (conferenceFormat === "pubform") {
+    const pub = conferenceConfig.pubform;
+    return [
+      [
+        "fa-heading",
+        "Heading 1 (Roman)",
+        `${pub.heading1.fontFamily} ${pub.heading1.fontSize}pt, ${alignLabel(pub.heading1.alignment)}, ${pub.heading1.uppercase ? "uppercase" : "normal case"}, ${pub.heading1.italic ? "italic" : "regular"}.`,
+      ],
+      [
+        "fa-list-ol",
+        "Heading 2 (Lettered)",
+        `${pub.heading2.fontFamily} ${pub.heading2.fontSize}pt, ${alignLabel(pub.heading2.alignment)}, ${pub.heading2.titleCase ? "title case" : "source case"}, ${pub.heading2.italic ? "italic" : "regular"}.`,
+      ],
+      [
+        "fa-align-justify",
+        "Body Paragraph",
+        `${pub.body.fontFamily} ${pub.body.fontSize}pt, ${alignLabel(pub.body.alignment)}, line spacing ${pub.body.lineSpacing.toFixed(2)}, first-line indent ${pub.body.firstLineIndentCm.toFixed(2)} cm, spacing after ${pub.body.spacingAfterPt.toFixed(0)} pt.`,
+      ],
+      [
+        "fa-book",
+        "References",
+        `${pub.references.fontFamily} ${pub.references.fontSize}pt, ${alignLabel(pub.references.alignment)}, hanging indent ${pub.references.hangingIndentCm.toFixed(2)} cm, ${pub.references.ieeeStyle ? "IEEE markers [n]" : "manual marker style"}.`,
+      ],
+    ];
+  }
+
+  const acm = conferenceConfig.acm;
+  return [
+    [
+      "fa-heading",
+      "Title",
+      `${acm.title.fontFamily} ${acm.title.fontSize}pt, ${alignLabel(acm.title.alignment)}, ${acm.title.bold ? "bold" : "regular"}, line spacing ${acm.title.lineSpacing.toFixed(2)}.`,
+    ],
+    [
+      "fa-file-lines",
+      "Subtitle / Front Matter",
+      `${acm.subtitle.fontFamily} ${acm.subtitle.fontSize}pt, ${alignLabel(acm.subtitle.alignment)}, ${acm.subtitle.italic ? "italic" : "regular"}.`,
+    ],
+    [
+      "fa-users",
+      "Author Block",
+      `${acm.author.fontFamily} ${acm.author.fontSize}pt, ${alignLabel(acm.author.alignment)}, ${acm.author.bold ? "bold" : "regular"}.`,
+    ],
+    [
+      "fa-list-ol",
+      "Section Headings",
+      `${acm.heading.fontFamily} ${acm.heading.fontSize}pt, ${alignLabel(acm.heading.alignment)}, ${acm.heading.bold ? "bold" : "regular"}.`,
+    ],
+    [
+      "fa-align-left",
+      "Body and References",
+      `Body: ${acm.body.fontFamily} ${acm.body.fontSize}pt (${alignLabel(acm.body.alignment)}). References: ${acm.references.fontFamily} ${acm.references.fontSize}pt (${alignLabel(acm.references.alignment)}).`,
+    ],
+  ];
+}
+
+export default function PreviewModal({
+  open,
+  onClose,
+  formattingStandard,
+  citationStyle,
+  conferenceFormat,
+  conferenceConfig,
+}: PreviewProps) {
   const [visible, setVisible] = useState(false);
   const [closing, setClosing] = useState(false);
+
+  const rules = useMemo(
+    () =>
+      formattingStandard === "conference"
+        ? conferencePreviewRules(conferenceFormat, conferenceConfig)
+        : CCC_PREVIEW_RULES(citationStyle),
+    [formattingStandard, conferenceFormat, conferenceConfig, citationStyle],
+  );
+
+  const title =
+    formattingStandard === "conference"
+      ? conferenceFormat === "pubform"
+        ? "Publication Rule Preview"
+        : "ACM Rule Preview"
+      : "Formatting Guide";
+  const subText =
+    formattingStandard === "conference"
+      ? "Editable conference formatting rules currently in use."
+      : "Rules applied to your manuscript.";
 
   useEffect(() => {
     if (open) {
@@ -81,11 +184,8 @@ export function PreviewModal({ open, onClose }: PreviewProps) {
       }}
     >
       <div className={`sheet-modal${closing ? " closing" : ""}`}>
-        {/* Header */}
         <div className="px-5 pt-4 pb-2 shrink-0">
-          <div
-            className="sheet-drag-handle"
-          />
+          <div className="sheet-drag-handle" />
           <div className="flex items-center justify-between">
             <div>
               <p
@@ -98,7 +198,7 @@ export function PreviewModal({ open, onClose }: PreviewProps) {
                 className="text-xl font-bold mt-0.5"
                 style={{ color: "var(--text-primary)" }}
               >
-                Formatting Guide
+                {title}
               </h2>
             </div>
             <button
@@ -114,15 +214,14 @@ export function PreviewModal({ open, onClose }: PreviewProps) {
             </button>
           </div>
           <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-            Rules applied to your manuscript.
+            {subText}
           </p>
         </div>
 
-        {/* Body */}
         <div className="flex-1 overflow-y-auto px-5 pb-4 space-y-2.5 mt-2">
-          {PREVIEW_RULES.map(([icon, title, desc]) => (
+          {rules.map(([icon, ruleTitle, desc]) => (
             <div
-              key={title}
+              key={ruleTitle}
               className="rounded-2xl border p-4"
               style={{
                 background: "var(--surface-raised)",
@@ -143,7 +242,7 @@ export function PreviewModal({ open, onClose }: PreviewProps) {
                   className="text-sm font-semibold"
                   style={{ color: "var(--text-primary)" }}
                 >
-                  {title}
+                  {ruleTitle}
                 </h3>
               </div>
               <p
@@ -156,7 +255,6 @@ export function PreviewModal({ open, onClose }: PreviewProps) {
           ))}
         </div>
 
-        {/* Footer */}
         <div
           className="shrink-0 border-t px-5 py-4"
           style={{ borderColor: "var(--border)", background: "var(--surface)" }}
@@ -177,4 +275,3 @@ export function PreviewModal({ open, onClose }: PreviewProps) {
   );
 }
 
-export default PreviewModal;
