@@ -1,3 +1,4 @@
+// In the acm formatting, let's ignore for now the first page content which are the title of the paper up to the ACM Reference Format and the footnote. Now let's proceed to the introduction and other parts of the ACM. for the heading 1 like "1 INTRODUCTION" the format of it should be Linux Biolinum O with the size of 9 and all uppercase with space before (12 pt) and after (3pt) paragraph and bold. Heading 2  (e.g. "1.1 Accessibility") should have font family of Linux Biolinum O with size of 9, Capital each first letter of words and bold. All headings should have spacing before (12pt) and after (3pt) paragaph
 import {
   DEFAULT_CONFERENCE_FORMATTING_CONFIG,
   type AcmFormattingConfig,
@@ -26,9 +27,11 @@ const AI_ASSIST_ENABLED = isAiAssistEnabled(
   import.meta.env.VITE_ENABLE_AI_ASSIST,
 );
 
-const PUBFORM_SOURCE_FILE = "/conference/publication_formatting_guidelines.docx";
+const PUBFORM_SOURCE_FILE =
+  "/conference/publication_formatting_guidelines.docx";
 const ACM_SOURCE_FILE = "/conference/acm_formatting_guidelines.docx";
-const FALLBACK_W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+const FALLBACK_W_NS =
+  "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 
 function resolveWNs(doc: Document): string {
   return doc.documentElement.lookupNamespaceURI("w") ?? FALLBACK_W_NS;
@@ -48,25 +51,38 @@ function wElem(doc: Document, wNs: string, local: string): Element {
 
 function getChild(parent: Element, wNs: string, local: string): Element | null {
   for (const c of Array.from(parent.childNodes)) {
-    if (c instanceof Element && c.namespaceURI === wNs && c.localName === local) {
+    if (
+      c instanceof Element &&
+      c.namespaceURI === wNs &&
+      c.localName === local
+    ) {
       return c;
     }
   }
   return null;
 }
 
-function ensureChild(parent: Element, wNs: string, local: string, prepend = false): Element {
+function ensureChild(
+  parent: Element,
+  wNs: string,
+  local: string,
+  prepend = false,
+): Element {
   const existing = getChild(parent, wNs, local);
   if (existing) return existing;
   const child = wElem(parent.ownerDocument!, wNs, local);
-  if (prepend && parent.firstChild) parent.insertBefore(child, parent.firstChild);
+  if (prepend && parent.firstChild)
+    parent.insertBefore(child, parent.firstChild);
   else parent.appendChild(child);
   return child;
 }
 
 function removeChildren(parent: Element, wNs: string, local: string) {
   Array.from(parent.childNodes)
-    .filter((c) => c instanceof Element && c.namespaceURI === wNs && c.localName === local)
+    .filter(
+      (c) =>
+        c instanceof Element && c.namespaceURI === wNs && c.localName === local,
+    )
     .forEach((c) => parent.removeChild(c));
 }
 
@@ -220,7 +236,12 @@ function clearParagraphContent(p: Element, wNs: string) {
   });
 }
 
-function writeColumnBreakRun(p: Element, wNs: string, fontFamily: string, fontPt: number) {
+function writeColumnBreakRun(
+  p: Element,
+  wNs: string,
+  fontFamily: string,
+  fontPt: number,
+) {
   const run = wElem(p.ownerDocument!, wNs, "r");
   applyRunTypography(run, wNs, fontFamily, fontPt, false);
   const br = wElem(p.ownerDocument!, wNs, "br");
@@ -268,7 +289,9 @@ function setParagraphTwoAuthorColumns(
 
   leftLines.forEach((line, idx) => writeLine(line, idx < leftLines.length - 1));
   writeColumnBreakRun(p, wNs, fontFamily, fontPt);
-  rightLines.forEach((line, idx) => writeLine(line, idx < rightLines.length - 1));
+  rightLines.forEach((line, idx) =>
+    writeLine(line, idx < rightLines.length - 1),
+  );
   writeParagraphLayout(p, wNs, "center", 1.0, 0);
 }
 
@@ -301,7 +324,9 @@ function setParagraphAuthorColumns(
 
   authors.forEach((author, authorIndex) => {
     const lines = toStyledAuthorLines(author);
-    lines.forEach((line, lineIndex) => writeLine(line, lineIndex < lines.length - 1));
+    lines.forEach((line, lineIndex) =>
+      writeLine(line, lineIndex < lines.length - 1),
+    );
     if (authorIndex < authors.length - 1) {
       writeColumnBreakRun(p, wNs, fontFamily, fontPt);
     }
@@ -321,7 +346,9 @@ function extractContacts(text: string): string[] {
   if (merged.length > 0) return merged;
 
   // Fallback when values are not strict email/ORCID patterns.
-  const cleaned = text.replace(/^(emails?|line\s*5:|orcid)[:\s-]*/iu, "").trim();
+  const cleaned = text
+    .replace(/^(emails?|line\s*5:|orcid)[:\s-]*/iu, "")
+    .trim();
   if (!cleaned) return [];
   return cleaned
     .split(/\s*;\s*/u)
@@ -340,7 +367,10 @@ function splitAuthorNames(text: string): string[] {
     .filter(Boolean);
 }
 
-function normalizeInputLinesUntilAbstract(doc: Document, wNs: string): string[] {
+function normalizeInputLinesUntilAbstract(
+  doc: Document,
+  wNs: string,
+): string[] {
   const body = getBody(doc, wNs);
   if (!body) return [];
   const paras = Array.from(body.getElementsByTagNameNS(wNs, "p"));
@@ -383,7 +413,9 @@ function parseAuthorEntriesFromFrontMatter(lines: string[]): AuthorEntry[] {
     if (names.length === 0) continue;
 
     const deptCandidate =
-      nonContact.find((l) => /\bdept\b|\bdepartment\b/iu.test(l)) ?? nonContact[1] ?? "";
+      nonContact.find((l) => /\bdept\b|\bdepartment\b/iu.test(l)) ??
+      nonContact[1] ??
+      "";
     let department = deptCandidate.trim();
     let organization = "";
 
@@ -395,8 +427,12 @@ function parseAuthorEntriesFromFrontMatter(lines: string[]): AuthorEntry[] {
 
     const cityLine =
       nonContact.find((l) =>
-        /\bcity\b|\bcountry\b|\bphilippines\b|\busa\b|\buk\b|\bcanada\b/iu.test(l),
-      ) ?? nonContact[nonContact.length - 1] ?? "";
+        /\bcity\b|\bcountry\b|\bphilippines\b|\busa\b|\buk\b|\bcanada\b/iu.test(
+          l,
+        ),
+      ) ??
+      nonContact[nonContact.length - 1] ??
+      "";
 
     if (!organization) {
       organization =
@@ -463,17 +499,23 @@ function coerceAuthorEntries(raw: unknown): AuthorEntry[] {
       department: toCleanLine(obj.department),
       organization: toCleanLine(obj.organization),
       cityCountry: toCleanLine(obj.cityCountry ?? obj.city_country ?? obj.city),
-      contact: toCleanLine(obj.contact ?? obj.emailOrOrcid ?? obj.email ?? obj.orcid),
+      contact: toCleanLine(
+        obj.contact ?? obj.emailOrOrcid ?? obj.email ?? obj.orcid,
+      ),
     });
   }
 
   return normalizeAuthorEntries(entries);
 }
 
-async function tryExtractAuthorsWithAi(lines: string[]): Promise<AuthorEntry[] | null> {
+async function tryExtractAuthorsWithAi(
+  lines: string[],
+): Promise<AuthorEntry[] | null> {
   if (!AI_ASSIST_ENABLED || lines.length === 0) return null;
 
-  const promptLines = lines.map((line, idx) => `${idx + 1}. ${line}`).join("\n");
+  const promptLines = lines
+    .map((line, idx) => `${idx + 1}. ${line}`)
+    .join("\n");
   const model = String(
     import.meta.env.VITE_POLLINATIONS_AUTHOR_MODEL ||
       import.meta.env.VITE_POLLINATIONS_MODEL ||
@@ -573,7 +615,9 @@ function getParagraphStyleId(p: Element, wNs: string): string | null {
 function collectNumberedParagraphStyleIds(stylesDoc: Document): Set<string> {
   const stylesWNs = resolveWNs(stylesDoc);
   const set = new Set<string>();
-  const styleNodes = Array.from(stylesDoc.getElementsByTagNameNS(stylesWNs, "style"));
+  const styleNodes = Array.from(
+    stylesDoc.getElementsByTagNameNS(stylesWNs, "style"),
+  );
   for (const styleNode of styleNodes) {
     if (wAttr(styleNode, stylesWNs, "type") !== "paragraph") continue;
     const styleId = wAttr(styleNode, stylesWNs, "styleId").trim();
@@ -638,7 +682,11 @@ function stripLeadingListMarkers(text: string): string {
   return out;
 }
 
-function normalizeTemplateNumberedText(templateParagraph: Element, wNs: string, text: string): string {
+function normalizeTemplateNumberedText(
+  templateParagraph: Element,
+  wNs: string,
+  text: string,
+): string {
   if (!hasParagraphNumbering(templateParagraph, wNs)) return text;
   const lines = text.split(/\r?\n/u);
   if (lines.length === 0) return text;
@@ -747,7 +795,11 @@ function toStyledAuthorLines(author: AuthorEntry): StyledLine[] {
   ];
 }
 
-function writeAuthorParagraphContent(p: Element, wNs: string, authors: AuthorEntry[]) {
+function writeAuthorParagraphContent(
+  p: Element,
+  wNs: string,
+  authors: AuthorEntry[],
+) {
   const lines: StyledLine[] = [];
   authors.forEach((author, index) => {
     if (index > 0) lines.push({ text: "", italic: false });
@@ -828,10 +880,20 @@ function writeParagraphIndent(
   const ind = ensureChild(pPr, wNs, "ind");
 
   if (typeof indent.leftTwips === "number") {
-    setWAttr(ind, wNs, "left", String(Math.max(0, Math.round(indent.leftTwips))));
+    setWAttr(
+      ind,
+      wNs,
+      "left",
+      String(Math.max(0, Math.round(indent.leftTwips))),
+    );
   }
   if (typeof indent.rightTwips === "number") {
-    setWAttr(ind, wNs, "right", String(Math.max(0, Math.round(indent.rightTwips))));
+    setWAttr(
+      ind,
+      wNs,
+      "right",
+      String(Math.max(0, Math.round(indent.rightTwips))),
+    );
   }
   if (typeof indent.firstLineTwips === "number") {
     setWAttr(
@@ -904,13 +966,7 @@ function applyTextStyle(
   style: ConferenceTextStyle,
   afterTwips = 0,
 ) {
-  writeParagraphLayout(
-    p,
-    wNs,
-    style.alignment,
-    style.lineSpacing,
-    afterTwips,
-  );
+  writeParagraphLayout(p, wNs, style.alignment, style.lineSpacing, afterTwips);
   writeRunFormatting(
     p,
     wNs,
@@ -975,7 +1031,9 @@ function isPublicationHeading2(text: string): boolean {
 }
 
 function isPublicationReferencesHeading(text: string): boolean {
-  const normalized = normalizeText(text).replace(/^[IVXLCDM]+\.\s*/iu, "").trim();
+  const normalized = normalizeText(text)
+    .replace(/^[IVXLCDM]+\.\s*/iu, "")
+    .trim();
   return normalized.toUpperCase() === "REFERENCES";
 }
 
@@ -1080,7 +1138,9 @@ function applyPublicationRuleBasedFormatting(
     }
 
     if (isPublicationHeading1(text)) {
-      const heading = styleConfig.heading1.uppercase ? text.toUpperCase() : text;
+      const heading = styleConfig.heading1.uppercase
+        ? text.toUpperCase()
+        : text;
       if (heading !== text) {
         setParagraphText(p, wNs, heading);
       }
@@ -1134,7 +1194,11 @@ function isLikelyAcmHeading(text: string): boolean {
   if (text.length < 3 || text.length > 90) return false;
   if (/[.?!:]$/u.test(text)) return false;
   if (/^table\s+\d+/iu.test(text) || /^figure\s+\d+/iu.test(text)) return false;
-  if (/^(introduction|related work|methodology|methods|results|discussion|conclusion|references)$/iu.test(text)) {
+  if (
+    /^(introduction|related work|methodology|methods|results|discussion|conclusion|references)$/iu.test(
+      text,
+    )
+  ) {
     return true;
   }
   if (/^[A-Z][A-Za-z0-9 ,/&\-()]+$/u.test(text)) return true;
@@ -1145,7 +1209,9 @@ function isLikelyAcmHeading(text: string): boolean {
 function isLikelyAuthorLine(text: string): boolean {
   return (
     text.includes("@") ||
-    /department|institute|university|college|school|center|laboratory/iu.test(text) ||
+    /department|institute|university|college|school|center|laboratory/iu.test(
+      text,
+    ) ||
     /^[A-Z][A-Za-z.'\-]+(?:\s+[A-Z][A-Za-z.'\-]+)*(?:,\s*[A-Z][A-Za-z.'\-]+(?:\s+[A-Z][A-Za-z.'\-]+)*)*(?:\s+and\s+[A-Z][A-Za-z.'\-]+(?:\s+[A-Z][A-Za-z.'\-]+)*)?$/u.test(
       text,
     )
@@ -1251,7 +1317,10 @@ async function applyPublicationTemplate(
 ): Promise<void> {
   const inputDoc = await parseDocFromZip(inputZip, "word/document.xml");
   const templateDoc = await parseDocFromZip(pubformZip, "word/document.xml");
-  const templateStylesDoc = await parseDocFromZip(pubformZip, "word/styles.xml");
+  const templateStylesDoc = await parseDocFromZip(
+    pubformZip,
+    "word/styles.xml",
+  );
 
   const inputWNs = resolveWNs(inputDoc);
   const templateWNs = resolveWNs(templateDoc);
@@ -1261,9 +1330,16 @@ async function applyPublicationTemplate(
   const templateBody = getBody(templateDoc, templateWNs);
   if (!inputBody || !templateBody) throw new Error("Invalid document body.");
 
-  const inputParas = Array.from(inputBody.getElementsByTagNameNS(inputWNs, "p"));
-  const templateParas = Array.from(templateBody.getElementsByTagNameNS(templateWNs, "p"));
-  const authorParaIndexes = findPubformAuthorParagraphIndexes(templateParas, templateWNs);
+  const inputParas = Array.from(
+    inputBody.getElementsByTagNameNS(inputWNs, "p"),
+  );
+  const templateParas = Array.from(
+    templateBody.getElementsByTagNameNS(templateWNs, "p"),
+  );
+  const authorParaIndexes = findPubformAuthorParagraphIndexes(
+    templateParas,
+    templateWNs,
+  );
 
   const copyCount = Math.min(inputParas.length, templateParas.length);
   for (let i = 0; i < copyCount; i++) {
@@ -1281,7 +1357,11 @@ async function applyPublicationTemplate(
         // Keep source numbering marker (e.g. C.) and suppress template auto-numbering.
         disableParagraphNumbering(templateParagraph, templateWNs);
       } else {
-        text = normalizeTemplateNumberedText(templateParagraph, templateWNs, sourceText);
+        text = normalizeTemplateNumberedText(
+          templateParagraph,
+          templateWNs,
+          sourceText,
+        );
       }
     }
     setParagraphText(templateParas[i], templateWNs, text);
@@ -1309,7 +1389,11 @@ async function applyPublicationTemplate(
   if (authorParaIndexes.top >= 0) {
     const topAuthors = authors.slice(0, 4);
     if (topAuthors.length > 1) {
-      setParagraphAuthorColumns(templateParas[authorParaIndexes.top], templateWNs, topAuthors);
+      setParagraphAuthorColumns(
+        templateParas[authorParaIndexes.top],
+        templateWNs,
+        topAuthors,
+      );
     } else {
       writeAuthorParagraphContent(
         templateParas[authorParaIndexes.top],
@@ -1320,7 +1404,10 @@ async function applyPublicationTemplate(
   }
 
   // Remove empty publication-author gap paragraphs between top row and lower row.
-  if (authorParaIndexes.top >= 0 && authorParaIndexes.fifth > authorParaIndexes.top + 1) {
+  if (
+    authorParaIndexes.top >= 0 &&
+    authorParaIndexes.fifth > authorParaIndexes.top + 1
+  ) {
     removeInterveningBodyParagraphs(
       templateBody,
       templateParas,
@@ -1348,7 +1435,13 @@ async function applyPublicationTemplate(
         "10.80pt",
       );
       clearParagraphContent(templateParas[lowerSectionBreakIndex], templateWNs);
-      writeParagraphLayout(templateParas[lowerSectionBreakIndex], templateWNs, "center", 1.0, 0);
+      writeParagraphLayout(
+        templateParas[lowerSectionBreakIndex],
+        templateWNs,
+        "center",
+        1.0,
+        0,
+      );
     }
 
     if (hasTwoLowerAuthors) {
@@ -1372,8 +1465,17 @@ async function applyPublicationTemplate(
 
   if (authorParaIndexes.sixth >= 0) {
     if (authors[4] && authors[5]) {
-      clearParagraphContent(templateParas[authorParaIndexes.sixth], templateWNs);
-      writeParagraphLayout(templateParas[authorParaIndexes.sixth], templateWNs, "center", 1.0, 0);
+      clearParagraphContent(
+        templateParas[authorParaIndexes.sixth],
+        templateWNs,
+      );
+      writeParagraphLayout(
+        templateParas[authorParaIndexes.sixth],
+        templateWNs,
+        "center",
+        1.0,
+        0,
+      );
     } else {
       writeAuthorParagraphContent(
         templateParas[authorParaIndexes.sixth],
@@ -1387,10 +1489,16 @@ async function applyPublicationTemplate(
     templateParas,
     templateWNs,
     /^abstract\b/iu,
-    Math.max(authorParaIndexes.sixth, authorParaIndexes.fifth, authorParaIndexes.top) + 1,
+    Math.max(
+      authorParaIndexes.sixth,
+      authorParaIndexes.fifth,
+      authorParaIndexes.top,
+    ) + 1,
   );
   const cleanupStart =
-    authorParaIndexes.sixth >= 0 ? authorParaIndexes.sixth + 1 : authorParaIndexes.fifth + 1;
+    authorParaIndexes.sixth >= 0
+      ? authorParaIndexes.sixth + 1
+      : authorParaIndexes.fifth + 1;
   if (abstractParagraphIndex > cleanupStart && cleanupStart >= 0) {
     tightenPreAbstractGap(
       templateBody,
