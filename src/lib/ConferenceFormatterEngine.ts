@@ -1,4 +1,3 @@
-// In the acm formatting, let's ignore for now the first page content which are the title of the paper up to the ACM Reference Format and the footnote. Now let's proceed to the introduction and other parts of the ACM. for the heading 1 like "1 INTRODUCTION" the format of it should be Linux Biolinum O with the size of 9 and all uppercase with space before (12 pt) and after (3pt) paragraph and bold. Heading 2  (e.g. "1.1 Accessibility") should have font family of Linux Biolinum O with size of 9, Capital each first letter of words and bold. All headings should have spacing before (12pt) and after (3pt) paragaph
 import {
   DEFAULT_CONFERENCE_FORMATTING_CONFIG,
   type AcmFormattingConfig,
@@ -13,6 +12,7 @@ import { isAiAssistEnabled } from "./aiAssist";
 interface ConferenceFormatOptions {
   format: ConferenceFormat;
   styleConfig?: ConferenceFormattingConfig;
+  aiAssist?: boolean;
 }
 
 interface AuthorEntry {
@@ -23,15 +23,30 @@ interface AuthorEntry {
   contact: string;
 }
 
+type AcmParagraphKind =
+  | "ignore"
+  | "heading1"
+  | "heading2"
+  | "heading3"
+  | "body"
+  | "tableCaption"
+  | "figureCaption"
+  | "footnote"
+  | "equation"
+  | "references";
+
+type AcmParagraphHintMap = Map<number, AcmParagraphKind>;
+
 const AI_ASSIST_ENABLED = isAiAssistEnabled(
   import.meta.env.VITE_ENABLE_AI_ASSIST,
 );
 
 const PUBFORM_SOURCE_FILE =
   "/conference/publication_formatting_guidelines.docx";
-const ACM_SOURCE_FILE = "/conference/acm_formatting_guidelines.docx";
 const FALLBACK_W_NS =
   "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+const M_NS =
+  "http://schemas.openxmlformats.org/officeDocument/2006/math";
 
 function resolveWNs(doc: Document): string {
   return doc.documentElement.lookupNamespaceURI("w") ?? FALLBACK_W_NS;
@@ -150,6 +165,43 @@ function setParagraphText(p: Element, wNs: string, text: string) {
     }
     t.textContent = part;
     run.appendChild(t);
+  }
+
+  p.appendChild(run);
+}
+
+function setParagraphTextWithTabs(p: Element, wNs: string, text: string) {
+  const preservedRPr = clonePreferredRunProps(p, wNs);
+  const existingPPr = getChild(p, wNs, "pPr");
+  Array.from(p.childNodes).forEach((n) => {
+    if (n !== existingPPr) p.removeChild(n);
+  });
+
+  const run = wElem(p.ownerDocument!, wNs, "r");
+  if (preservedRPr) {
+    run.appendChild(preservedRPr);
+  }
+
+  const lines = text.split(/\r?\n/u);
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    if (lineIndex > 0) {
+      run.appendChild(wElem(p.ownerDocument!, wNs, "br"));
+    }
+
+    const segments = lines[lineIndex].split("\t");
+    for (let segmentIndex = 0; segmentIndex < segments.length; segmentIndex += 1) {
+      if (segmentIndex > 0) {
+        run.appendChild(wElem(p.ownerDocument!, wNs, "tab"));
+      }
+      const part = segments[segmentIndex];
+      if (part === "") continue;
+      const t = wElem(p.ownerDocument!, wNs, "t");
+      if (/^\s/u.test(part) || /\s$/u.test(part) || /\s{2,}/u.test(part)) {
+        t.setAttribute("xml:space", "preserve");
+      }
+      t.textContent = part;
+      run.appendChild(t);
+    }
   }
 
   p.appendChild(run);
@@ -455,6 +507,92 @@ function parseAuthorEntriesFromFrontMatter(lines: string[]): AuthorEntry[] {
   return authors.slice(0, 6);
 }
 
+function extractEmailOrOrcid(text: string): string {
+  const email = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu)?.[0];
+  if (email) return email.trim();
+  const orcid = text.match(/\b\d{4}-\d{4}-\d{4}-\d{3}[\dX]\b/iu)?.[0];
+  return orcid ? orcid.trim() : "";
+}
+
+function stripContactFromAffiliation(text: string): string {
+  return normalizeText(text)
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/giu, "")
+    .replace(/\b\d{4}-\d{4}-\d{4}-\d{3}[\dX]\b/giu, "")
+    .replace(/\s*,\s*$/u, "")
+    .replace(/^\s*,\s*/u, "")
+    .trim();
+}
+
+function looksLikeAcmSubtitleLine(text: string): boolean {
+  const normalized = normalizeText(text);
+  if (!normalized) return false;
+  if (isLikelyAcmAffiliationLine(normalized)) return false;
+  if (isLikelyAcmAuthorNameLine(normalized)) return false;
+  if (/author/i.test(normalized) && /name/i.test(normalized)) return false;
+  return true;
+}
+
+function getAcmAuthorExtractionLines(lines: string[]): string[] {
+  if (lines.length <= 2) return lines;
+  if (!looksLikeAcmSubtitleLine(lines[1])) return lines;
+  return [lines[0], ...lines.slice(2)];
+}
+
+function parseAcmAuthorEntriesFromFrontMatter(lines: string[]): AuthorEntry[] {
+  if (lines.length <= 1) return [];
+
+  const authorLines = getAcmAuthorExtractionLines(lines).slice(1);
+  const authors: AuthorEntry[] = [];
+  let currentName = "";
+  let affiliationParts: string[] = [];
+  let contact = "";
+
+  const flush = () => {
+    if (!currentName.trim()) return;
+    const affiliation = affiliationParts
+      .map((part) => normalizeText(part))
+      .filter(Boolean)
+      .join(", ");
+    authors.push({
+      name: normalizeText(currentName),
+      department: affiliation,
+      organization: "",
+      cityCountry: "",
+      contact: contact.trim(),
+    });
+    currentName = "";
+    affiliationParts = [];
+    contact = "";
+  };
+
+  for (const line of authorLines) {
+    const text = normalizeText(line);
+    if (!text) continue;
+    if (isAcmAbstractStart(text)) break;
+    if (isAcmConceptsParagraph(text)) break;
+    if (isAcmKeywordsParagraph(text)) break;
+    if (isAcmReferenceFormatParagraph(text)) break;
+
+    const lineIsAffiliation = isLikelyAcmAffiliationLine(text);
+    if (!lineIsAffiliation && currentName && (affiliationParts.length > 0 || contact)) {
+      flush();
+    }
+
+    if (!currentName) {
+      currentName = text;
+      continue;
+    }
+
+    const lineContact = extractEmailOrOrcid(text);
+    if (lineContact && !contact) contact = lineContact;
+    const affiliationText = stripContactFromAffiliation(text);
+    if (affiliationText) affiliationParts.push(affiliationText);
+  }
+
+  flush();
+  return normalizeAuthorEntries(authors);
+}
+
 function toCleanLine(value: unknown): string {
   if (typeof value !== "string") return "";
   return value.replace(/\s+/gu, " ").trim();
@@ -510,8 +648,9 @@ function coerceAuthorEntries(raw: unknown): AuthorEntry[] {
 
 async function tryExtractAuthorsWithAi(
   lines: string[],
+  enabled = AI_ASSIST_ENABLED,
 ): Promise<AuthorEntry[] | null> {
-  if (!AI_ASSIST_ENABLED || lines.length === 0) return null;
+  if (!enabled || lines.length === 0) return null;
 
   const promptLines = lines
     .map((line, idx) => `${idx + 1}. ${line}`)
@@ -550,6 +689,7 @@ async function tryExtractAuthorsWithAi(
           ].join("\n"),
         },
       ],
+      timeoutMs: 12000,
     });
 
     const jsonText = extractJsonObject(aiResult.reply);
@@ -561,6 +701,122 @@ async function tryExtractAuthorsWithAi(
   } catch (error) {
     void error;
     return null;
+  }
+}
+
+const ACM_PARAGRAPH_KINDS = new Set<AcmParagraphKind>([
+  "ignore",
+  "heading1",
+  "heading2",
+  "heading3",
+  "body",
+  "tableCaption",
+  "figureCaption",
+  "footnote",
+  "equation",
+  "references",
+]);
+
+function coerceAcmParagraphKind(value: unknown): AcmParagraphKind | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return ACM_PARAGRAPH_KINDS.has(normalized as AcmParagraphKind)
+    ? (normalized as AcmParagraphKind)
+    : null;
+}
+
+function coerceAcmParagraphHints(raw: unknown): AcmParagraphHintMap {
+  const hints: AcmParagraphHintMap = new Map();
+  const rows = Array.isArray(raw)
+    ? raw
+    : raw && typeof raw === "object"
+      ? (raw as { paragraphs?: unknown }).paragraphs
+      : null;
+  if (!Array.isArray(rows)) return hints;
+
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    const obj = row as Record<string, unknown>;
+    const index = Number(obj.i ?? obj.index ?? obj.paragraphIndex);
+    const kind = coerceAcmParagraphKind(obj.type ?? obj.kind ?? obj.role);
+    if (!Number.isInteger(index) || index < 0 || !kind) continue;
+    hints.set(index, kind);
+  }
+
+  return hints;
+}
+
+async function tryClassifyAcmParagraphsWithAi(
+  doc: Document,
+  enabled = AI_ASSIST_ENABLED,
+): Promise<AcmParagraphHintMap> {
+  const hints: AcmParagraphHintMap = new Map();
+  if (!enabled) return hints;
+
+  const wNs = resolveWNs(doc);
+  const body = getBody(doc, wNs);
+  if (!body) return hints;
+
+  const children = getTopLevelBodyChildren(body, wNs);
+  const rows = children
+    .map((child, index) => {
+      if (child.localName !== "p") return null;
+      const text = normalizeText(getParagraphText(child, wNs));
+      if (!text) return null;
+      return {
+        index,
+        text: text.length > 180 ? `${text.slice(0, 180)}...` : text,
+      };
+    })
+    .filter((row): row is { index: number; text: string } => !!row)
+    .slice(0, 220);
+
+  if (rows.length === 0) return hints;
+
+  const promptRows = rows.map((row) => `[${row.index}] ${row.text}`).join("\n");
+  const model = String(
+    import.meta.env.VITE_POLLINATIONS_ACM_MODEL ||
+      import.meta.env.VITE_POLLINATIONS_MODEL ||
+      "",
+  ).trim();
+
+  try {
+    const aiResult = await requestPollinations({
+      model: model || undefined,
+      temperature: 0,
+      maxTokens: 1800,
+      timeoutMs: 15000,
+      messages: [
+        {
+          role: "system",
+          content:
+            "Classify ACM paper paragraphs. Reply with strict JSON only and no prose.",
+        },
+        {
+          role: "user",
+          content: [
+            "Classify these top-level DOCX paragraph indexes for ACM formatting.",
+            "Ignore title/authors/abstract/CCS/keywords/ACM Reference Format/front-matter/permission footnote before the main paper body.",
+            "Use these exact types only: ignore, heading1, heading2, heading3, body, tableCaption, figureCaption, footnote, equation, references.",
+            "heading1 means top-level sections such as Introduction, Related Work, Methodology, Results, Discussion, Conclusion, Acknowledgments, or References.",
+            "heading2 means subsection; heading3 means sub-subsection. The heading may be numbered or unnumbered.",
+            "references means only the References heading, not each reference entry.",
+            "Return only JSON in this shape:",
+            '{"paragraphs":[{"i":0,"type":"ignore"}]}',
+            "",
+            "Paragraphs:",
+            promptRows,
+          ].join("\n"),
+        },
+      ],
+    });
+
+    const jsonText = extractJsonObject(aiResult.reply);
+    if (!jsonText) return hints;
+    return coerceAcmParagraphHints(JSON.parse(jsonText));
+  } catch (error) {
+    void error;
+    return hints;
   }
 }
 
@@ -844,6 +1100,10 @@ function writeParagraphLayout(
   lineSpacing: number,
   afterTwips: number,
   beforeTwips = 0,
+  options?: {
+    lineRule?: "auto" | "exact" | "atLeast";
+    lineTwips?: number;
+  },
 ) {
   const pPr = ensurePPr(p, wNs);
   removeChildren(pPr, wNs, "jc");
@@ -855,8 +1115,13 @@ function writeParagraphLayout(
   const sp = ensureChild(pPr, wNs, "spacing");
   setWAttr(sp, wNs, "before", String(beforeTwips));
   setWAttr(sp, wNs, "after", String(afterTwips));
-  setWAttr(sp, wNs, "line", String(linesToTwips(lineSpacing)));
-  setWAttr(sp, wNs, "lineRule", "auto");
+  setWAttr(
+    sp,
+    wNs,
+    "line",
+    String(Math.max(0, Math.round(options?.lineTwips ?? linesToTwips(lineSpacing)))),
+  );
+  setWAttr(sp, wNs, "lineRule", options?.lineRule ?? "auto");
   setWAttr(sp, wNs, "beforeAutospacing", "0");
   setWAttr(sp, wNs, "afterAutospacing", "0");
 }
@@ -913,6 +1178,66 @@ function writeParagraphIndent(
   }
 }
 
+function writeRunProperties(
+  rPr: Element,
+  wNs: string,
+  fontFamily: string,
+  fontPt: number,
+  bold: boolean,
+  italic: boolean,
+  colorHex?: string,
+) {
+  const halfPt = String(ptsToHalfPts(fontPt));
+
+  removeChildren(rPr, wNs, "rFonts");
+  const rFonts = ensureChild(rPr, wNs, "rFonts");
+  setWAttr(rFonts, wNs, "ascii", fontFamily);
+  setWAttr(rFonts, wNs, "hAnsi", fontFamily);
+  setWAttr(rFonts, wNs, "eastAsia", fontFamily);
+  setWAttr(rFonts, wNs, "cs", fontFamily);
+
+  removeChildren(rPr, wNs, "sz");
+  removeChildren(rPr, wNs, "szCs");
+  const sz = ensureChild(rPr, wNs, "sz");
+  setWAttr(sz, wNs, "val", halfPt);
+  const szCs = ensureChild(rPr, wNs, "szCs");
+  setWAttr(szCs, wNs, "val", halfPt);
+
+  removeChildren(rPr, wNs, "b");
+  removeChildren(rPr, wNs, "bCs");
+  if (bold) {
+    rPr.appendChild(wElem(rPr.ownerDocument!, wNs, "b"));
+    rPr.appendChild(wElem(rPr.ownerDocument!, wNs, "bCs"));
+  } else {
+    const b = wElem(rPr.ownerDocument!, wNs, "b");
+    setWAttr(b, wNs, "val", "0");
+    rPr.appendChild(b);
+    const bCs = wElem(rPr.ownerDocument!, wNs, "bCs");
+    setWAttr(bCs, wNs, "val", "0");
+    rPr.appendChild(bCs);
+  }
+
+  removeChildren(rPr, wNs, "i");
+  removeChildren(rPr, wNs, "iCs");
+  if (italic) {
+    rPr.appendChild(wElem(rPr.ownerDocument!, wNs, "i"));
+    rPr.appendChild(wElem(rPr.ownerDocument!, wNs, "iCs"));
+  } else {
+    const i = wElem(rPr.ownerDocument!, wNs, "i");
+    setWAttr(i, wNs, "val", "0");
+    rPr.appendChild(i);
+    const iCs = wElem(rPr.ownerDocument!, wNs, "iCs");
+    setWAttr(iCs, wNs, "val", "0");
+    rPr.appendChild(iCs);
+  }
+
+  if (typeof colorHex === "string" && colorHex.trim()) {
+    removeChildren(rPr, wNs, "color");
+    const color = ensureChild(rPr, wNs, "color");
+    setWAttr(color, wNs, "val", colorHex.trim());
+  }
+}
+
 function writeRunFormatting(
   p: Element,
   wNs: string,
@@ -920,43 +1245,28 @@ function writeRunFormatting(
   fontPt: number,
   bold: boolean,
   italic: boolean,
+  colorHex?: string,
 ) {
   const runNodes = Array.from(p.getElementsByTagNameNS(wNs, "r"));
-  const halfPt = String(ptsToHalfPts(fontPt));
+
+  const pPr = ensurePPr(p, wNs);
+  const paragraphRPr = ensureChild(pPr, wNs, "rPr");
+  writeRunProperties(
+    paragraphRPr,
+    wNs,
+    fontFamily,
+    fontPt,
+    bold,
+    italic,
+    colorHex,
+  );
 
   for (const run of runNodes) {
     const hasText = run.getElementsByTagNameNS(wNs, "t").length > 0;
     if (!hasText) continue;
 
     const rPr = ensureRPr(run, wNs);
-
-    removeChildren(rPr, wNs, "rFonts");
-    const rFonts = ensureChild(rPr, wNs, "rFonts");
-    setWAttr(rFonts, wNs, "ascii", fontFamily);
-    setWAttr(rFonts, wNs, "hAnsi", fontFamily);
-    setWAttr(rFonts, wNs, "eastAsia", fontFamily);
-    setWAttr(rFonts, wNs, "cs", fontFamily);
-
-    removeChildren(rPr, wNs, "sz");
-    removeChildren(rPr, wNs, "szCs");
-    const sz = ensureChild(rPr, wNs, "sz");
-    setWAttr(sz, wNs, "val", halfPt);
-    const szCs = ensureChild(rPr, wNs, "szCs");
-    setWAttr(szCs, wNs, "val", halfPt);
-
-    removeChildren(rPr, wNs, "b");
-    removeChildren(rPr, wNs, "bCs");
-    if (bold) {
-      rPr.appendChild(wElem(p.ownerDocument!, wNs, "b"));
-      rPr.appendChild(wElem(p.ownerDocument!, wNs, "bCs"));
-    }
-
-    removeChildren(rPr, wNs, "i");
-    removeChildren(rPr, wNs, "iCs");
-    if (italic) {
-      rPr.appendChild(wElem(p.ownerDocument!, wNs, "i"));
-      rPr.appendChild(wElem(p.ownerDocument!, wNs, "iCs"));
-    }
+    writeRunProperties(rPr, wNs, fontFamily, fontPt, bold, italic, colorHex);
   }
 }
 
@@ -975,6 +1285,222 @@ function applyTextStyle(
     !!style.bold,
     !!style.italic,
   );
+}
+
+interface ConferenceParagraphStyleOptions {
+  alignment?: "left" | "center" | "right" | "both";
+  beforePt?: number;
+  afterPt?: number;
+  firstLineIndentCm?: number;
+  hangingIndentCm?: number;
+  lineSpacingPt?: number;
+  lineSpacingRule?: "auto" | "exact" | "atLeast";
+  color?: string;
+}
+
+function applyConferenceParagraphLayout(
+  p: Element,
+  wNs: string,
+  style: ConferenceTextStyle,
+  options: ConferenceParagraphStyleOptions = {},
+) {
+  const alignment = options.alignment ?? style.alignment;
+  const beforePt = options.beforePt ?? style.spacingBeforePt ?? 0;
+  const afterPt = options.afterPt ?? style.spacingAfterPt ?? 0;
+  const lineSpacingPt = options.lineSpacingPt ?? style.lineSpacingPt;
+  const lineRule = options.lineSpacingRule ?? style.lineSpacingRule ?? "auto";
+  const lineTwips =
+    typeof lineSpacingPt === "number"
+      ? ptToTwips(lineSpacingPt)
+      : linesToTwips(style.lineSpacing);
+
+  writeParagraphLayout(
+    p,
+    wNs,
+    alignment,
+    style.lineSpacing,
+    ptToTwips(afterPt),
+    ptToTwips(beforePt),
+    {
+      lineRule,
+      lineTwips,
+    },
+  );
+
+  const firstLineIndentCm =
+    options.firstLineIndentCm ?? style.firstLineIndentCm;
+  const hangingIndentCm = options.hangingIndentCm ?? style.hangingIndentCm;
+  if (
+    typeof firstLineIndentCm === "number" ||
+    typeof hangingIndentCm === "number"
+  ) {
+    writeParagraphIndent(p, wNs, {
+      firstLineTwips:
+        typeof firstLineIndentCm === "number"
+          ? cmToTwips(firstLineIndentCm)
+          : undefined,
+      hangingTwips:
+        typeof hangingIndentCm === "number"
+          ? cmToTwips(hangingIndentCm)
+          : undefined,
+    });
+  } else {
+    writeParagraphIndent(p, wNs);
+  }
+}
+
+function applyConferenceTextStyle(
+  p: Element,
+  wNs: string,
+  style: ConferenceTextStyle,
+  options: ConferenceParagraphStyleOptions = {},
+) {
+  applyConferenceParagraphLayout(p, wNs, style, options);
+  writeRunFormatting(
+    p,
+    wNs,
+    style.fontFamily,
+    style.fontSize,
+    !!style.bold,
+    !!style.italic,
+    options.color ?? style.color ?? "000000",
+  );
+}
+
+interface StyledRunPart {
+  text: string;
+  bold?: boolean;
+  italic?: boolean;
+  fontSize?: number;
+}
+
+function setParagraphStyledRuns(
+  p: Element,
+  wNs: string,
+  style: ConferenceTextStyle,
+  parts: StyledRunPart[],
+  options: ConferenceParagraphStyleOptions = {},
+) {
+  const existingPPr = getChild(p, wNs, "pPr");
+  Array.from(p.childNodes).forEach((n) => {
+    if (n !== existingPPr) p.removeChild(n);
+  });
+
+  applyConferenceParagraphLayout(p, wNs, style, options);
+
+  for (const part of parts) {
+    if (part.text === "") continue;
+    const run = wElem(p.ownerDocument!, wNs, "r");
+    const rPr = ensureRPr(run, wNs);
+    writeRunProperties(
+      rPr,
+      wNs,
+      style.fontFamily,
+      part.fontSize ?? style.fontSize,
+      part.bold ?? !!style.bold,
+      part.italic ?? !!style.italic,
+      options.color ?? style.color ?? "000000",
+    );
+    const t = wElem(p.ownerDocument!, wNs, "t");
+    if (/^\s/u.test(part.text) || /\s$/u.test(part.text) || /\s{2,}/u.test(part.text)) {
+      t.setAttribute("xml:space", "preserve");
+    }
+    t.textContent = part.text;
+    run.appendChild(t);
+    p.appendChild(run);
+  }
+}
+
+function applyParagraphPrefixBold(
+  p: Element,
+  wNs: string,
+  style: ConferenceTextStyle,
+  prefixPattern: RegExp,
+  options: ConferenceParagraphStyleOptions = {},
+) {
+  const text = normalizeText(getParagraphText(p, wNs));
+  const match = text.match(prefixPattern);
+  if (!match || match.index !== 0) {
+    applyConferenceTextStyle(p, wNs, style, options);
+    return;
+  }
+
+  const prefix = match[0];
+  const rest = text.slice(prefix.length);
+  setParagraphStyledRuns(
+    p,
+    wNs,
+    style,
+    [
+      { text: prefix, bold: true },
+      { text: rest, bold: false },
+    ],
+    options,
+  );
+}
+
+function applyAcmKeywordsParagraph(
+  p: Element,
+  wNs: string,
+  style: ConferenceTextStyle,
+) {
+  const text = normalizeText(getParagraphText(p, wNs));
+  const match = text.match(/^additional\s+keywords\s+and\s+phrases\s*:\s*/iu);
+  const keywordStyle: ConferenceTextStyle = {
+    ...style,
+    fontFamily: "Linux Libertine O",
+    fontSize: 9,
+    alignment: "both",
+    bold: false,
+    italic: false,
+    lineSpacingPt: 13.5,
+    lineSpacingRule: "atLeast",
+    color: "000000",
+  };
+
+  if (!match || match.index !== 0) {
+    applyConferenceTextStyle(p, wNs, keywordStyle, {
+      alignment: "both",
+      beforePt: style.spacingBeforePt ?? 7,
+      afterPt: style.spacingAfterPt ?? 0,
+      lineSpacingPt: 13.5,
+      lineSpacingRule: "atLeast",
+      color: "000000",
+    });
+    return;
+  }
+
+  const prefix = match[0];
+  const rest = text.slice(prefix.length);
+  setParagraphStyledRuns(
+    p,
+    wNs,
+    keywordStyle,
+    [
+      { text: prefix, bold: true, fontSize: 8 },
+      { text: rest, bold: false, fontSize: 9 },
+    ],
+    {
+      alignment: "both",
+      beforePt: style.spacingBeforePt ?? 7,
+      afterPt: style.spacingAfterPt ?? 0,
+      lineSpacingPt: 13.5,
+      lineSpacingRule: "atLeast",
+      color: "000000",
+    },
+  );
+}
+
+function setParagraphPageBreakBefore(
+  p: Element,
+  wNs: string,
+  enabled: boolean,
+) {
+  const pPr = ensurePPr(p, wNs);
+  removeChildren(pPr, wNs, "pageBreakBefore");
+  if (enabled) {
+    pPr.appendChild(wElem(p.ownerDocument!, wNs, "pageBreakBefore"));
+  }
 }
 
 function cloneDeep<T>(value: T): T {
@@ -1190,20 +1716,43 @@ function enforceSingleColumnNoHeaderFooter(body: Element, wNs: string) {
   }
 }
 
-function isLikelyAcmHeading(text: string): boolean {
-  if (text.length < 3 || text.length > 90) return false;
-  if (/[.?!:]$/u.test(text)) return false;
-  if (/^table\s+\d+/iu.test(text) || /^figure\s+\d+/iu.test(text)) return false;
-  if (
-    /^(introduction|related work|methodology|methods|results|discussion|conclusion|references)$/iu.test(
-      text,
-    )
-  ) {
-    return true;
-  }
-  if (/^[A-Z][A-Za-z0-9 ,/&\-()]+$/u.test(text)) return true;
-  if (/^\d+(\.\d+)*\s+[A-Za-z]/u.test(text)) return true;
-  return false;
+function getTopLevelBodyChildren(body: Element, wNs: string): Element[] {
+  return Array.from(body.childNodes).filter(
+    (c): c is Element =>
+      c instanceof Element &&
+      c.namespaceURI === wNs &&
+      (c.localName === "p" || c.localName === "tbl"),
+  );
+}
+
+function getDirectChildElements(parent: Element, wNs: string, local: string) {
+  return Array.from(parent.childNodes).filter(
+    (c): c is Element =>
+      c instanceof Element && c.namespaceURI === wNs && c.localName === local,
+  );
+}
+
+function hasMathContent(p: Element, wNs: string): boolean {
+  return (
+    p.getElementsByTagNameNS(M_NS, "oMath").length > 0 ||
+    p.getElementsByTagNameNS(M_NS, "oMathPara").length > 0
+  );
+}
+
+function hasDrawingOrPicture(p: Element, wNs: string): boolean {
+  return (
+    p.getElementsByTagNameNS(wNs, "drawing").length > 0 ||
+    p.getElementsByTagNameNS(wNs, "pict").length > 0
+  );
+}
+
+function isAcmFootnoteParagraph(text: string): boolean {
+  const normalized = normalizeText(text);
+  if (!normalized) return false;
+  if (/^[*†‡]\s+/u.test(normalized)) return true;
+  return /permission to make digital|personal or classroom use|copyright|conference publication|this work is licensed|for personal or classroom use/iu.test(
+    normalized,
+  );
 }
 
 function isLikelyAuthorLine(text: string): boolean {
@@ -1218,7 +1767,1059 @@ function isLikelyAuthorLine(text: string): boolean {
   );
 }
 
+function isLikelyAcmHeading(text: string): boolean {
+  return parseAcmHeading(text) !== null;
+}
+
+function isAcmFigureCaption(text: string): boolean {
+  const normalized = normalizeText(text);
+  return /^figure\s+\d+(?:\.\d+)?[:.]?\s+/iu.test(normalized);
+}
+
+function isAcmTableCaption(text: string): boolean {
+  const normalized = normalizeText(text);
+  return /^table\s+\d+(?:\.\d+)?[:.]?\s+/iu.test(normalized);
+}
+
+function isAcmEquationParagraph(p: Element, text: string): boolean {
+  if (hasMathContent(p, resolveWNs(p.ownerDocument!))) return true;
+  const normalized = normalizeText(text);
+  if (!normalized || normalized.length > 80) return false;
+  if (!/[=+\-*/^∑∫≤≥≈]/u.test(normalized)) return false;
+  return /^[A-Za-z0-9\s()+\-*/=,^_{}\[\].]+$/u.test(normalized);
+}
+
+function toAcmTitleCaseWord(token: string): string {
+  return toHeading2TitleCaseWord(token);
+}
+
+function normalizeAcmHeading2(text: string): string {
+  const normalized = normalizeText(text);
+  const match = normalized.match(/^(\d+\.\d+)(?:[.)])?\s+(.+)$/u);
+  if (!match) {
+    return normalized
+      .split(/\s+/u)
+      .map((token) => toAcmTitleCaseWord(token))
+      .join(" ");
+  }
+  const marker = match[1];
+  const content = match[2]
+    .split(/\s+/u)
+    .map((token) => toAcmTitleCaseWord(token))
+    .join(" ");
+  return `${marker} ${content}`.trim();
+}
+
+interface AcmHeadingMatch {
+  level: 1 | 2 | 3;
+  marker: string;
+  title: string;
+}
+
+function isAcmHeadingTitle(title: string): boolean {
+  const normalized = normalizeText(title);
+  if (!normalized) return false;
+  if (normalized.length > 120) return false;
+  if (/^(abstract|keywords|ccs concepts|acm reference format)$/iu.test(normalized)) {
+    return false;
+  }
+  return !/[.?!:]$/u.test(normalized);
+}
+
+function parseAcmHeading(text: string): AcmHeadingMatch | null {
+  const normalized = normalizeText(text);
+  if (!normalized) return null;
+  if (/^references$/iu.test(normalized)) {
+    return { level: 1, marker: "", title: "REFERENCES" };
+  }
+
+  if (
+    /^(introduction|background|related work|literature review|methodology|methods|materials and methods|implementation|experiment|experiments|evaluation|results|discussion|results and discussion|conclusion|conclusions|future work|acknowledgments?|references)$/iu.test(
+      normalized,
+    )
+  ) {
+    return { level: 1, marker: "", title: normalized };
+  }
+
+  const h3 = normalized.match(/^(\d+\.\d+\.\d+(?:\.\d+)*)\s+(.+)$/u);
+  if (h3 && isAcmHeadingTitle(h3[2])) {
+    return { level: 3, marker: h3[1], title: h3[2] };
+  }
+
+  const h2 = normalized.match(/^(\d+\.\d+)(?:[.)])?\s+(.+)$/u);
+  if (h2 && isAcmHeadingTitle(h2[2])) {
+    return { level: 2, marker: h2[1], title: h2[2] };
+  }
+
+  const h1 = normalized.match(/^(\d+)(?:[.)])?\s+(.+)$/u);
+  if (h1 && isAcmHeadingTitle(h1[2])) {
+    return { level: 1, marker: h1[1], title: h1[2] };
+  }
+
+  return null;
+}
+
+function getTableRows(tbl: Element, wNs: string): Element[] {
+  return getDirectChildElements(tbl, wNs, "tr");
+}
+
+function getTableCells(row: Element, wNs: string): Element[] {
+  return getDirectChildElements(row, wNs, "tc");
+}
+
+function getParagraphsInCell(cell: Element, wNs: string): Element[] {
+  return getDirectChildElements(cell, wNs, "p");
+}
+
+function getRowText(row: Element, wNs: string): string {
+  const parts: string[] = [];
+  for (const cell of getTableCells(row, wNs)) {
+    const cellText = getParagraphsInCell(cell, wNs)
+      .map((p) => normalizeText(getParagraphText(p, wNs)))
+      .join(" ");
+    parts.push(cellText);
+  }
+  return normalizeText(parts.join(" "));
+}
+
+function ensureTableCellBorder(
+  cell: Element,
+  wNs: string,
+  side: "top" | "bottom",
+  size = "4",
+) {
+  let tcPr = getChild(cell, wNs, "tcPr");
+  if (!tcPr) {
+    tcPr = wElem(cell.ownerDocument!, wNs, "tcPr");
+    cell.insertBefore(tcPr, cell.firstChild);
+  }
+
+  let tcBorders = getChild(tcPr, wNs, "tcBorders");
+  if (!tcBorders) {
+    tcBorders = wElem(cell.ownerDocument!, wNs, "tcBorders");
+    tcPr.appendChild(tcBorders);
+  }
+
+  const border = ensureChild(tcBorders, wNs, side);
+  setWAttr(border, wNs, "val", "single");
+  setWAttr(border, wNs, "sz", size);
+  setWAttr(border, wNs, "space", "0");
+  setWAttr(border, wNs, "color", "000000");
+}
+
+function clearTableCellBorders(cell: Element, wNs: string) {
+  const tcPr = getChild(cell, wNs, "tcPr");
+  if (!tcPr) return;
+  removeChildren(tcPr, wNs, "tcBorders");
+}
+
+function clearTableCellBackground(cell: Element, wNs: string) {
+  let tcPr = getChild(cell, wNs, "tcPr");
+  if (!tcPr) {
+    tcPr = wElem(cell.ownerDocument!, wNs, "tcPr");
+    cell.insertBefore(tcPr, cell.firstChild);
+  }
+  removeChildren(tcPr, wNs, "shd");
+  const shd = ensureChild(tcPr, wNs, "shd");
+  setWAttr(shd, wNs, "val", "clear");
+  setWAttr(shd, wNs, "color", "auto");
+  setWAttr(shd, wNs, "fill", "auto");
+}
+
+function setTableRowHeaderRepeat(row: Element, wNs: string, repeat: boolean) {
+  let trPr = getChild(row, wNs, "trPr");
+  if (!trPr) {
+    trPr = wElem(row.ownerDocument!, wNs, "trPr");
+    row.insertBefore(trPr, row.firstChild);
+  }
+  removeChildren(trPr, wNs, "tblHeader");
+  if (!repeat) return;
+  const header = ensureChild(trPr, wNs, "tblHeader");
+  setWAttr(header, wNs, "val", "true");
+}
+
+function countAcmTableHeaderRows(rows: Element[], wNs: string): number {
+  if (rows.length === 0) return 0;
+  let headerCount = 1;
+  for (let i = 1; i < rows.length; i += 1) {
+    const text = getRowText(rows[i], wNs);
+    if (!text) break;
+    if (text.length > 140) break;
+    if (/[.?!]/u.test(text)) break;
+    headerCount += 1;
+  }
+  return headerCount;
+}
+
+function deFloatTable(tbl: Element, wNs: string) {
+  const tblPr = getChild(tbl, wNs, "tblPr");
+  if (!tblPr) return;
+  removeChildren(tblPr, wNs, "tblpPr");
+  removeChildren(tblPr, wNs, "positionH");
+  removeChildren(tblPr, wNs, "positionV");
+  const tblInd = getChild(tblPr, wNs, "tblInd");
+  if (tblInd) {
+    setWAttr(tblInd, wNs, "w", "0");
+    setWAttr(tblInd, wNs, "type", "dxa");
+  }
+}
+
+function applyAcmTable(
+  tbl: Element,
+  wNs: string,
+  styleConfig: AcmFormattingConfig,
+) {
+  deFloatTable(tbl, wNs);
+
+  const tblPr = ensureChild(tbl, wNs, "tblPr");
+  removeChildren(tblPr, wNs, "tblStyle");
+  removeChildren(tblPr, wNs, "shd");
+  removeChildren(tblPr, wNs, "tblW");
+  const tblW = wElem(tbl.ownerDocument!, wNs, "tblW");
+  setWAttr(tblW, wNs, "type", "pct");
+  setWAttr(tblW, wNs, "w", "5000");
+  tblPr.appendChild(tblW);
+  Array.from(tbl.getElementsByTagNameNS(wNs, "tcW")).forEach((tcW) => {
+    if (tcW.namespaceURI === wNs) tcW.parentElement?.removeChild(tcW);
+  });
+  Array.from(tbl.getElementsByTagNameNS(wNs, "trHeight")).forEach((trH) => {
+    if (trH.namespaceURI === wNs) trH.parentElement?.removeChild(trH);
+  });
+  removeChildren(tblPr, wNs, "tblBorders");
+  const tblBorders = wElem(tbl.ownerDocument!, wNs, "tblBorders");
+  tblPr.appendChild(tblBorders);
+  const makeBorder = (local: string, val: string, sz: string) => {
+    const el = wElem(tbl.ownerDocument!, wNs, local);
+    setWAttr(el, wNs, "val", val);
+    setWAttr(el, wNs, "sz", sz);
+    setWAttr(el, wNs, "space", "0");
+    setWAttr(el, wNs, "color", "000000");
+    tblBorders.appendChild(el);
+  };
+  makeBorder("top", "none", "0");
+  makeBorder("left", "none", "0");
+  makeBorder("bottom", "none", "0");
+  makeBorder("right", "none", "0");
+  makeBorder("insideH", "none", "0");
+  makeBorder("insideV", "none", "0");
+
+  const rows = getTableRows(tbl, wNs);
+  if (rows.length === 0) return;
+
+  const headerRowCount = countAcmTableHeaderRows(rows, wNs);
+  const lastRow = rows[rows.length - 1];
+
+  rows.forEach((row, index) => {
+    setTableRowHeaderRepeat(row, wNs, index < headerRowCount);
+    const trPr = getChild(row, wNs, "trPr");
+    if (trPr) removeChildren(trPr, wNs, "shd");
+    const cells = getTableCells(row, wNs);
+    cells.forEach((cell) => {
+      clearTableCellBorders(cell, wNs);
+      clearTableCellBackground(cell, wNs);
+    });
+  });
+
+  const firstHeaderRow = rows[0];
+  const lastHeaderRow = rows[Math.max(0, headerRowCount - 1)];
+
+  for (const cell of getTableCells(firstHeaderRow, wNs)) {
+    ensureTableCellBorder(cell, wNs, "top");
+  }
+  for (const cell of getTableCells(lastHeaderRow, wNs)) {
+    ensureTableCellBorder(cell, wNs, "bottom");
+  }
+  if (lastRow !== lastHeaderRow) {
+    for (const cell of getTableCells(lastRow, wNs)) {
+      ensureTableCellBorder(cell, wNs, "bottom");
+    }
+  }
+
+  for (const row of rows) {
+    for (const cell of getTableCells(row, wNs)) {
+      for (const p of getParagraphsInCell(cell, wNs)) {
+        const text = normalizeText(getParagraphText(p, wNs));
+        if (!text && !hasDrawingOrPicture(p, wNs) && !hasMathContent(p, wNs)) {
+          applyConferenceTextStyle(p, wNs, styleConfig.table, {
+            alignment: "both",
+            beforePt: 0,
+            afterPt: 0,
+            firstLineIndentCm: 0,
+            hangingIndentCm: 0,
+            lineSpacingPt: styleConfig.table.lineSpacingPt ?? 11,
+            lineSpacingRule: styleConfig.table.lineSpacingRule ?? "atLeast",
+            color: styleConfig.table.color ?? "000000",
+          });
+          continue;
+        }
+
+        applyConferenceTextStyle(p, wNs, styleConfig.table, {
+          alignment: "both",
+          beforePt: 0,
+          afterPt: 0,
+          firstLineIndentCm: 0,
+          hangingIndentCm: 0,
+          lineSpacingPt: styleConfig.table.lineSpacingPt ?? 11,
+          lineSpacingRule: styleConfig.table.lineSpacingRule ?? "atLeast",
+          color: styleConfig.table.color ?? "000000",
+        });
+      }
+    }
+  }
+}
+
+function applyAcmHeadingParagraph(
+  p: Element,
+  wNs: string,
+  style: ConferenceTextStyle,
+  level: 1 | 2 | 3,
+) {
+  const effectiveStyle =
+    level === 2 ? { ...style, italic: false } : style;
+  const rawText = normalizeText(getParagraphText(p, wNs));
+  let nextText = rawText;
+
+  if (level === 1) {
+    const match = rawText.match(/^(\d+)(?:[.)])?\s+(.+)$/u);
+    if (match) {
+      nextText = `${match[1]} ${match[2].toUpperCase()}`.trim();
+    } else if (style.uppercase) {
+      nextText = rawText.toUpperCase();
+    }
+    if (/^references$/iu.test(rawText)) {
+      nextText = "REFERENCES";
+    }
+  } else if (level === 2) {
+    if (effectiveStyle.titleCase) {
+      nextText = normalizeAcmHeading2(rawText);
+    }
+  }
+
+  if (nextText !== rawText) {
+    setParagraphText(p, wNs, nextText);
+  }
+
+  applyConferenceTextStyle(p, wNs, effectiveStyle, {
+    alignment: effectiveStyle.alignment,
+    beforePt: effectiveStyle.spacingBeforePt ?? 12,
+    afterPt: effectiveStyle.spacingAfterPt ?? 3,
+    color: effectiveStyle.color ?? "000000",
+  });
+}
+
+function applyAcmReferenceParagraph(
+  p: Element,
+  wNs: string,
+  style: ConferenceTextStyle,
+  referenceIndex: number,
+): number {
+  const rawText = normalizeText(getParagraphText(p, wNs));
+  const nextReferenceIndex = referenceIndex + 1;
+  const normalizedMarker = normalizeIeeeReferenceMarker(rawText);
+  const strippedMarker = normalizedMarker.replace(/^\[\d{1,3}\]\s*/u, "").trim();
+  const nextText = `[${nextReferenceIndex}]\t${strippedMarker}`.trimEnd();
+
+  if (hasParagraphNumbering(p, wNs)) {
+    disableParagraphNumbering(p, wNs);
+  }
+
+  if (nextText !== rawText) {
+    setParagraphTextWithTabs(p, wNs, nextText);
+  }
+
+  applyConferenceTextStyle(p, wNs, style, {
+    alignment: "both",
+    beforePt: style.spacingBeforePt ?? 0,
+    afterPt: style.spacingAfterPt ?? 3,
+    hangingIndentCm: style.hangingIndentCm ?? 0.63,
+    lineSpacingPt: style.lineSpacingPt ?? 8.4,
+    lineSpacingRule: style.lineSpacingRule ?? "atLeast",
+    color: style.color ?? "000000",
+  });
+
+  return nextReferenceIndex;
+}
+
+function applyAcmSimpleParagraph(
+  p: Element,
+  wNs: string,
+  style: ConferenceTextStyle,
+  options: ConferenceParagraphStyleOptions = {},
+) {
+  applyConferenceTextStyle(p, wNs, style, {
+    alignment: options.alignment ?? style.alignment,
+    beforePt: options.beforePt ?? style.spacingBeforePt ?? 0,
+    afterPt: options.afterPt ?? style.spacingAfterPt ?? 0,
+    firstLineIndentCm: options.firstLineIndentCm ?? style.firstLineIndentCm,
+    hangingIndentCm: options.hangingIndentCm ?? style.hangingIndentCm,
+    lineSpacingPt: options.lineSpacingPt ?? style.lineSpacingPt,
+    lineSpacingRule: options.lineSpacingRule ?? style.lineSpacingRule,
+    color: options.color ?? style.color ?? "000000",
+  });
+}
+
+interface AcmFrontMatterState {
+  nonEmptyParagraphs: number;
+  inAbstract: boolean;
+  inReferenceFormat: boolean;
+  seenAffiliationLine: boolean;
+}
+
+function isAcmAbstractStart(text: string): boolean {
+  return /^abstract\b/iu.test(text) || /^abstract[-—]/iu.test(text);
+}
+
+function isAcmConceptsParagraph(text: string): boolean {
+  return /^ccs\s+concepts\b/iu.test(text);
+}
+
+function isAcmKeywordsParagraph(text: string): boolean {
+  return /^additional\s+keywords\s+and\s+phrases\s*:/iu.test(text);
+}
+
+function isAcmReferenceFormatParagraph(text: string): boolean {
+  return /^acm\s+reference\s+format\s*:/iu.test(text);
+}
+
+function isAcmSignatoryLineText(text: string): boolean {
+  return /^[_\-\u2013\u2014\s]{6,}$/u.test(text);
+}
+
+function isAcmPreliminaryFootnoteText(text: string): boolean {
+  return (
+    /^[*†‡]\s+/u.test(text) ||
+    /place the footnote text|permission to make digital|personal or classroom use|copyright|this work is licensed/iu.test(
+      text,
+    )
+  );
+}
+
+function isLikelyAcmAffiliationLine(text: string): boolean {
+  return (
+    /@/u.test(text) ||
+    /\borcid\b/iu.test(text) ||
+    /\b(affiliation|institution|university|college|school|department|institute|laboratory|lab|center|centre|city|country)\b/iu.test(
+      text,
+    )
+  );
+}
+
+function isEmailOnlyLine(text: string): boolean {
+  return /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}(?:\s*[,;]\s*[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})*$/iu.test(
+    normalizeText(text),
+  );
+}
+
+function isLikelyAcmAuthorNameLine(text: string): boolean {
+  const normalized = normalizeText(text);
+  if (!normalized || normalized.length > 100) return false;
+  if (isLikelyAcmAffiliationLine(normalized)) return false;
+  if (/[.?!:]/u.test(normalized)) return false;
+  return /^[A-Z][A-Za-z.'\-]+(?:\s+[A-Z][A-Za-z.'\-]+)+(?:\s*,\s*[A-Z][A-Za-z.'\-]+(?:\s+[A-Z][A-Za-z.'\-]+)+)*(?:\s+(?:and|&)\s+[A-Z][A-Za-z.'\-]+(?:\s+[A-Z][A-Za-z.'\-]+)+)?$/u.test(
+    normalized,
+  );
+}
+
+function shouldTreatAsAbstractBodyAfterAuthors(text: string): boolean {
+  const normalized = normalizeText(text);
+  if (!normalized) return false;
+  if (isAcmAbstractStart(normalized)) return true;
+  if (isAcmConceptsParagraph(normalized)) return false;
+  if (isAcmKeywordsParagraph(normalized)) return false;
+  if (isAcmReferenceFormatParagraph(normalized)) return false;
+  if (isAcmPreliminaryFootnoteText(normalized)) return false;
+  if (isLikelyAcmAffiliationLine(normalized)) return false;
+  if (isLikelyAcmAuthorNameLine(normalized)) return false;
+  if (/^(this\s+paper|in\s+this\s+paper|this\s+study|the\s+study|we\s+(present|propose|describe|introduce|investigate|examine))\b/iu.test(normalized)) {
+    return true;
+  }
+  if (normalized.length > 120) return true;
+  return /[.?!]$/u.test(normalized);
+}
+
+function getPreviousTopLevelParagraph(p: Element, wNs: string): Element | null {
+  let node = p.previousSibling;
+  while (node) {
+    if (
+      node instanceof Element &&
+      node.namespaceURI === wNs &&
+      node.localName === "p"
+    ) {
+      return node;
+    }
+    if (
+      node instanceof Element &&
+      node.namespaceURI === wNs &&
+      node.localName === "tbl"
+    ) {
+      return null;
+    }
+    node = node.previousSibling;
+  }
+  return null;
+}
+
+function getNextTopLevelParagraph(p: Element, wNs: string): Element | null {
+  let node = p.nextSibling;
+  while (node) {
+    if (
+      node instanceof Element &&
+      node.namespaceURI === wNs &&
+      node.localName === "p"
+    ) {
+      return node;
+    }
+    if (
+      node instanceof Element &&
+      node.namespaceURI === wNs &&
+      node.localName === "tbl"
+    ) {
+      return null;
+    }
+    node = node.nextSibling;
+  }
+  return null;
+}
+
+function mergeFollowingEmailIntoAffiliationLine(
+  p: Element,
+  wNs: string,
+  text: string,
+): string {
+  const parts = [normalizeText(text)];
+
+  for (let i = 0; i < 4; i += 1) {
+    if (/@/u.test(parts.join(" "))) break;
+
+    const next = getNextTopLevelParagraph(p, wNs);
+    if (!next) break;
+
+    const nextText = normalizeText(getParagraphText(next, wNs));
+    if (!nextText) break;
+    if (isAcmAbstractStart(nextText)) break;
+    if (isAcmConceptsParagraph(nextText)) break;
+    if (isAcmKeywordsParagraph(nextText)) break;
+    if (isAcmReferenceFormatParagraph(nextText)) break;
+    if (isLikelyAcmAuthorNameLine(nextText)) break;
+    if (!isLikelyAcmAffiliationLine(nextText) && !isEmailOnlyLine(nextText)) {
+      break;
+    }
+
+    parts.push(nextText);
+    next.parentNode?.removeChild(next);
+
+    if (isEmailOnlyLine(nextText)) break;
+  }
+
+  return parts.join(", ");
+}
+
+function acmAuthorAffiliationLine(author: AuthorEntry): string {
+  const parts = [
+    author.department,
+    author.organization,
+    author.cityCountry,
+    author.contact,
+  ]
+    .map((part) => normalizeText(part))
+    .filter(Boolean);
+  const deduped = parts.filter(
+    (part, index) =>
+      parts.findIndex((candidate) => candidate.toLowerCase() === part.toLowerCase()) === index,
+  );
+  return deduped.join(", ");
+}
+
+function createParagraphBefore(reference: Element, wNs: string): Element {
+  const p = wElem(reference.ownerDocument!, wNs, "p");
+  reference.parentNode?.insertBefore(p, reference);
+  return p;
+}
+
+function createTextParagraphBefore(
+  reference: Element,
+  wNs: string,
+  text: string,
+): Element {
+  const p = createParagraphBefore(reference, wNs);
+  setParagraphText(p, wNs, text);
+  return p;
+}
+
+function rebuildAcmAuthorBlock(
+  body: Element,
+  wNs: string,
+  authors: AuthorEntry[],
+) {
+  if (authors.length === 0) return;
+
+  const paragraphs = getDirectChildElements(body, wNs, "p");
+  const nonEmpty = paragraphs
+    .map((p, index) => ({
+      p,
+      index,
+      text: normalizeText(getParagraphText(p, wNs)),
+    }))
+    .filter((row) => row.text.length > 0);
+
+  if (nonEmpty.length < 4) return;
+
+  const authorStart = nonEmpty[2];
+  const abstractStart = nonEmpty.find(
+    (row, index) => index > 2 && isAcmAbstractStart(row.text),
+  );
+  if (!authorStart || !abstractStart) return;
+
+  for (let i = authorStart.index; i < abstractStart.index; i += 1) {
+    const p = paragraphs[i];
+    if (p?.parentNode === body) {
+      body.removeChild(p);
+    }
+  }
+
+  for (const author of authors) {
+    createTextParagraphBefore(abstractStart.p, wNs, author.name);
+    const affiliation = acmAuthorAffiliationLine(author);
+    if (affiliation) {
+      createTextParagraphBefore(abstractStart.p, wNs, affiliation);
+    }
+  }
+}
+
+async function getAcmAuthors(
+  doc: Document,
+  wNs: string,
+  aiAssist: boolean,
+): Promise<AuthorEntry[]> {
+  const frontMatterLines = normalizeInputLinesUntilAbstract(doc, wNs);
+  const extractionLines = getAcmAuthorExtractionLines(frontMatterLines);
+  const parsedAuthors = parseAcmAuthorEntriesFromFrontMatter(frontMatterLines);
+  const aiAuthors = await tryExtractAuthorsWithAi(extractionLines, aiAssist);
+  return normalizeAuthorEntries(aiAuthors ?? parsedAuthors);
+}
+
+function applyAcmSignatoryLine(p: Element, wNs: string) {
+  setParagraphText(p, wNs, "________________________________");
+  applyConferenceTextStyle(
+    p,
+    wNs,
+    {
+      fontFamily: "Linux Libertine O",
+      fontSize: 7,
+      lineSpacing: 1.0,
+      alignment: "left",
+      bold: false,
+      italic: false,
+      color: "000000",
+    },
+    {
+      alignment: "left",
+      beforePt: 48,
+      afterPt: 3,
+      lineSpacingRule: "auto",
+    },
+  );
+}
+
+function ensureAcmSignatoryLineBefore(p: Element, wNs: string) {
+  const previous = getPreviousTopLevelParagraph(p, wNs);
+  if (
+    previous &&
+    isAcmSignatoryLineText(normalizeText(getParagraphText(previous, wNs)))
+  ) {
+    applyAcmSignatoryLine(previous, wNs);
+    return;
+  }
+
+  const line = createParagraphBefore(p, wNs);
+  applyAcmSignatoryLine(line, wNs);
+}
+
+function applyAcmPreliminaryParagraph(
+  p: Element,
+  wNs: string,
+  styleConfig: AcmFormattingConfig,
+  state: AcmFrontMatterState,
+) {
+  const text = normalizeText(getParagraphText(p, wNs));
+  if (!text) return;
+
+  const ordinal = state.nonEmptyParagraphs;
+  state.nonEmptyParagraphs += 1;
+
+  if (isAcmSignatoryLineText(text)) {
+    applyAcmSignatoryLine(p, wNs);
+    return;
+  }
+
+  if (isAcmPreliminaryFootnoteText(text)) {
+    ensureAcmSignatoryLineBefore(p, wNs);
+    applyAcmSimpleParagraph(p, wNs, styleConfig.preliminaryFootnote, {
+      alignment: "both",
+      beforePt: styleConfig.preliminaryFootnote.spacingBeforePt ?? 0,
+      afterPt: styleConfig.preliminaryFootnote.spacingAfterPt ?? 0,
+      lineSpacingRule: styleConfig.preliminaryFootnote.lineSpacingRule ?? "auto",
+      lineSpacingPt: styleConfig.preliminaryFootnote.lineSpacingPt,
+      color: styleConfig.preliminaryFootnote.color ?? "000000",
+    });
+    state.inReferenceFormat = false;
+    return;
+  }
+
+  if (isAcmReferenceFormatParagraph(text)) {
+    state.inAbstract = false;
+    state.inReferenceFormat = true;
+    applyParagraphPrefixBold(
+      p,
+      wNs,
+      styleConfig.referenceFormatLabel,
+      /^acm\s+reference\s+format\s*:\s*/iu,
+      {
+        alignment: "both",
+        beforePt: styleConfig.referenceFormatLabel.spacingBeforePt ?? 8,
+        afterPt: styleConfig.referenceFormatLabel.spacingAfterPt ?? 0,
+        lineSpacingPt: styleConfig.referenceFormatLabel.lineSpacingPt ?? 9.6,
+        lineSpacingRule:
+          styleConfig.referenceFormatLabel.lineSpacingRule ?? "atLeast",
+        color: styleConfig.referenceFormatLabel.color ?? "000000",
+      },
+    );
+    return;
+  }
+
+  if (state.inReferenceFormat) {
+    applyAcmSimpleParagraph(p, wNs, styleConfig.referenceFormatContent, {
+      alignment: "both",
+      beforePt: styleConfig.referenceFormatContent.spacingBeforePt ?? 1,
+      afterPt: styleConfig.referenceFormatContent.spacingAfterPt ?? 0,
+      lineSpacingPt: styleConfig.referenceFormatContent.lineSpacingPt ?? 12,
+      lineSpacingRule:
+        styleConfig.referenceFormatContent.lineSpacingRule ?? "exact",
+      color: styleConfig.referenceFormatContent.color ?? "000000",
+    });
+    return;
+  }
+
+  if (isAcmConceptsParagraph(text)) {
+    state.inAbstract = false;
+    applyAcmSimpleParagraph(p, wNs, styleConfig.concepts, {
+      alignment: "both",
+      beforePt: styleConfig.concepts.spacingBeforePt ?? 7,
+      afterPt: styleConfig.concepts.spacingAfterPt ?? 0,
+      lineSpacingPt: styleConfig.concepts.lineSpacingPt ?? 13.5,
+      lineSpacingRule: styleConfig.concepts.lineSpacingRule ?? "atLeast",
+      color: styleConfig.concepts.color ?? "000000",
+    });
+    return;
+  }
+
+  if (isAcmKeywordsParagraph(text)) {
+    state.inAbstract = false;
+    applyAcmKeywordsParagraph(p, wNs, styleConfig.keywords);
+    return;
+  }
+
+  if (
+    isAcmAbstractStart(text) ||
+    state.inAbstract ||
+    (state.seenAffiliationLine && shouldTreatAsAbstractBodyAfterAuthors(text))
+  ) {
+    state.inAbstract = true;
+    const abstractStyle: ConferenceTextStyle = {
+      ...styleConfig.abstract,
+      fontFamily: "Linux Libertine O",
+      fontSize: 8,
+      alignment: "both",
+      bold: false,
+      italic: false,
+      lineSpacingPt: 12,
+      lineSpacingRule: "atLeast",
+      color: "000000",
+    };
+    applyAcmSimpleParagraph(p, wNs, abstractStyle, {
+      alignment: "both",
+      beforePt: 10,
+      afterPt: abstractStyle.spacingAfterPt ?? 0,
+      lineSpacingPt: 12,
+      lineSpacingRule: "atLeast",
+      color: "000000",
+    });
+    return;
+  }
+
+  if (ordinal === 0) {
+    applyAcmSimpleParagraph(p, wNs, styleConfig.title, {
+      alignment: "left",
+      beforePt: styleConfig.title.spacingBeforePt ?? 0,
+      afterPt: styleConfig.title.spacingAfterPt ?? 0,
+      lineSpacingPt: styleConfig.title.lineSpacingPt ?? 18,
+      lineSpacingRule: styleConfig.title.lineSpacingRule ?? "atLeast",
+      color: styleConfig.title.color ?? "000000",
+    });
+    return;
+  }
+
+  if (ordinal === 1) {
+    applyAcmSimpleParagraph(p, wNs, styleConfig.subtitle, {
+      alignment: "left",
+      beforePt: styleConfig.subtitle.spacingBeforePt ?? 0,
+      afterPt: styleConfig.subtitle.spacingAfterPt ?? 18,
+      lineSpacingPt: styleConfig.subtitle.lineSpacingPt ?? 16.65,
+      lineSpacingRule: styleConfig.subtitle.lineSpacingRule ?? "atLeast",
+      color: styleConfig.subtitle.color ?? "000000",
+    });
+    return;
+  }
+
+  if (isLikelyAcmAffiliationLine(text)) {
+    const affiliationText = mergeFollowingEmailIntoAffiliationLine(p, wNs, text);
+    setParagraphText(p, wNs, affiliationText);
+    state.seenAffiliationLine = true;
+    const affiliationStyle: ConferenceTextStyle = {
+      ...styleConfig.authorAffiliation,
+      fontFamily: "Linux Libertine O",
+      fontSize: 9,
+      alignment: "left",
+      bold: false,
+      italic: false,
+      lineSpacingPt: 14.85,
+      lineSpacingRule: "atLeast",
+      color: "000000",
+    };
+    applyAcmSimpleParagraph(p, wNs, affiliationStyle, {
+      alignment: "left",
+      beforePt: affiliationStyle.spacingBeforePt ?? 3,
+      afterPt: affiliationStyle.spacingAfterPt ?? 0,
+      lineSpacingPt: 14.85,
+      lineSpacingRule: "atLeast",
+      color: "000000",
+    });
+    return;
+  }
+
+  state.inAbstract = false;
+  applyAcmSimpleParagraph(p, wNs, styleConfig.author, {
+    alignment: "left",
+    beforePt: styleConfig.author.spacingBeforePt ?? 3,
+    afterPt: styleConfig.author.spacingAfterPt ?? 0,
+    lineSpacingPt: styleConfig.author.lineSpacingPt ?? 16,
+    lineSpacingRule: styleConfig.author.lineSpacingRule ?? "atLeast",
+    color: styleConfig.author.color ?? "000000",
+  });
+}
+
+function getAcmHeadingLevelFromKind(
+  kind: AcmParagraphKind | undefined,
+): 1 | 2 | 3 | null {
+  if (kind === "heading1" || kind === "references") return 1;
+  if (kind === "heading2") return 2;
+  if (kind === "heading3") return 3;
+  return null;
+}
+
+function getAcmHeadingStyle(
+  styleConfig: AcmFormattingConfig,
+  level: 1 | 2 | 3,
+): ConferenceTextStyle {
+  if (level === 1) return styleConfig.heading1;
+  if (level === 2) return styleConfig.heading2;
+  return styleConfig.heading3;
+}
+
 function applyAcmRuleBasedFormatting(
+  doc: Document,
+  styleConfig: AcmFormattingConfig,
+  paragraphHints: AcmParagraphHintMap = new Map(),
+  authors: AuthorEntry[] = [],
+) {
+  const wNs = resolveWNs(doc);
+  const body = getBody(doc, wNs);
+  if (!body) return;
+
+  enforceSingleColumnNoHeaderFooter(body, wNs);
+  rebuildAcmAuthorBlock(body, wNs, authors);
+
+  const children = getTopLevelBodyChildren(body, wNs);
+  let mainActive = false;
+  let inReferences = false;
+  let firstBodyAfterHeading = false;
+  let referenceIndex = 0;
+  const frontMatterState: AcmFrontMatterState = {
+    nonEmptyParagraphs: 0,
+    inAbstract: false,
+    inReferenceFormat: false,
+    seenAffiliationLine: false,
+  };
+
+  for (let childIndex = 0; childIndex < children.length; childIndex += 1) {
+    const child = children[childIndex];
+    if (child.parentNode !== body) continue;
+    const hintedKind = paragraphHints.get(childIndex);
+
+    if (child.localName === "tbl") {
+      if (mainActive) {
+        applyAcmTable(child, wNs, styleConfig);
+      }
+      continue;
+    }
+
+    const p = child;
+    const rawText = normalizeText(getParagraphText(p, wNs));
+    const localHeading = parseAcmHeading(rawText);
+    const hintedHeadingLevel = getAcmHeadingLevelFromKind(hintedKind);
+    const headingLevel = hintedHeadingLevel ?? localHeading?.level ?? null;
+    const isReferencesHeading =
+      hintedKind === "references" ||
+      /^references$/iu.test(rawText) ||
+      !!(
+        headingLevel === 1 &&
+        localHeading &&
+        /^references$/iu.test(localHeading.title)
+      );
+
+    if (!mainActive) {
+      if (hintedKind === "ignore" || !headingLevel) {
+        applyAcmPreliminaryParagraph(p, wNs, styleConfig, frontMatterState);
+        continue;
+      }
+
+      mainActive = true;
+      setParagraphPageBreakBefore(p, wNs, true);
+      if (isReferencesHeading) {
+        inReferences = true;
+      }
+
+      applyAcmHeadingParagraph(
+        p,
+        wNs,
+        getAcmHeadingStyle(styleConfig, headingLevel),
+        headingLevel,
+      );
+
+      firstBodyAfterHeading = true;
+      continue;
+    }
+
+    if (rawText === "") {
+      if (inReferences) {
+        applyAcmSimpleParagraph(p, wNs, styleConfig.references, {
+          alignment: "both",
+          beforePt: 0,
+          afterPt: 0,
+          hangingIndentCm: styleConfig.references.hangingIndentCm ?? 0.63,
+          lineSpacingPt: styleConfig.references.lineSpacingPt,
+          lineSpacingRule: styleConfig.references.lineSpacingRule,
+        });
+      } else {
+        applyAcmSimpleParagraph(p, wNs, styleConfig.body, {
+          beforePt: 0,
+          afterPt: 0,
+          firstLineIndentCm: 0,
+          lineSpacingPt: styleConfig.body.lineSpacingPt,
+          lineSpacingRule: styleConfig.body.lineSpacingRule,
+        });
+      }
+      continue;
+    }
+
+    if (headingLevel) {
+      if (isReferencesHeading) {
+        inReferences = true;
+      }
+      applyAcmHeadingParagraph(
+        p,
+        wNs,
+        getAcmHeadingStyle(styleConfig, headingLevel),
+        headingLevel,
+      );
+      firstBodyAfterHeading = true;
+      continue;
+    }
+
+    if (hintedKind === "footnote" || isAcmFootnoteParagraph(rawText)) {
+      applyAcmSimpleParagraph(p, wNs, styleConfig.footnote, {
+        alignment: "center",
+        beforePt: styleConfig.footnote.spacingBeforePt ?? 3,
+        afterPt: styleConfig.footnote.spacingAfterPt ?? 10,
+        lineSpacingRule: styleConfig.footnote.lineSpacingRule ?? "auto",
+        lineSpacingPt: styleConfig.footnote.lineSpacingPt,
+      });
+      continue;
+    }
+
+    if (inReferences) {
+      referenceIndex = applyAcmReferenceParagraph(
+        p,
+        wNs,
+        styleConfig.references,
+        referenceIndex,
+      );
+      continue;
+    }
+
+    if (hintedKind === "tableCaption" || isAcmTableCaption(rawText)) {
+      applyAcmSimpleParagraph(p, wNs, styleConfig.tableCaption, {
+        alignment: "center",
+        beforePt: styleConfig.tableCaption.spacingBeforePt ?? 9,
+        afterPt: styleConfig.tableCaption.spacingAfterPt ?? 6,
+        lineSpacingPt: styleConfig.tableCaption.lineSpacingPt,
+        lineSpacingRule: styleConfig.tableCaption.lineSpacingRule,
+      });
+      continue;
+    }
+
+    if (hintedKind === "figureCaption" || isAcmFigureCaption(rawText)) {
+      applyAcmSimpleParagraph(p, wNs, styleConfig.figureCaption, {
+        alignment: "center",
+        beforePt: styleConfig.figureCaption.spacingBeforePt ?? 3,
+        afterPt: styleConfig.figureCaption.spacingAfterPt ?? 9,
+        lineSpacingPt: styleConfig.figureCaption.lineSpacingPt,
+        lineSpacingRule: styleConfig.figureCaption.lineSpacingRule,
+      });
+      continue;
+    }
+
+    if (hintedKind === "equation" || isAcmEquationParagraph(p, rawText)) {
+      applyAcmSimpleParagraph(p, wNs, styleConfig.equation, {
+        alignment: "center",
+        beforePt: styleConfig.equation.spacingBeforePt ?? 0,
+        afterPt: styleConfig.equation.spacingAfterPt ?? 0,
+        lineSpacingPt: styleConfig.equation.lineSpacingPt,
+        lineSpacingRule: styleConfig.equation.lineSpacingRule,
+      });
+      continue;
+    }
+
+    if (hasDrawingOrPicture(p, wNs)) {
+      applyAcmSimpleParagraph(p, wNs, styleConfig.figure, {
+        alignment: "center",
+        beforePt: styleConfig.figure.spacingBeforePt ?? 6,
+        afterPt: styleConfig.figure.spacingAfterPt ?? 10,
+        lineSpacingPt: styleConfig.figure.lineSpacingPt,
+        lineSpacingRule: styleConfig.figure.lineSpacingRule,
+      });
+      continue;
+    }
+
+    if (firstBodyAfterHeading) {
+      applyAcmSimpleParagraph(p, wNs, styleConfig.body, {
+        firstLineIndentCm: 0,
+        lineSpacingPt: styleConfig.body.lineSpacingPt,
+        lineSpacingRule: styleConfig.body.lineSpacingRule,
+      });
+      firstBodyAfterHeading = false;
+      continue;
+    }
+
+    applyAcmSimpleParagraph(p, wNs, styleConfig.body, {
+      firstLineIndentCm: styleConfig.body.firstLineIndentCm ?? 0.42,
+      lineSpacingPt: styleConfig.body.lineSpacingPt,
+      lineSpacingRule: styleConfig.body.lineSpacingRule,
+    });
+  }
+}
+
+function applyAcmRuleBasedFormattingLegacy(
   doc: Document,
   styleConfig: AcmFormattingConfig,
 ) {
@@ -1314,6 +2915,7 @@ async function applyPublicationTemplate(
   inputZip: any,
   pubformZip: any,
   styleConfig: PublicationFormattingConfig,
+  aiAssist = AI_ASSIST_ENABLED,
 ): Promise<void> {
   const inputDoc = await parseDocFromZip(inputZip, "word/document.xml");
   const templateDoc = await parseDocFromZip(pubformZip, "word/document.xml");
@@ -1370,143 +2972,158 @@ async function applyPublicationTemplate(
   // Rebuild author front-matter as 5-line blocks per author
   // (name, department, organization, city/country, email/ORCID).
   const frontMatterLines = normalizeInputLinesUntilAbstract(inputDoc, inputWNs);
-  const parsedAuthors = parseAuthorEntriesFromFrontMatter(frontMatterLines);
-  const aiAuthors = await tryExtractAuthorsWithAi(frontMatterLines);
-  const authors = normalizeAuthorEntries(aiAuthors ?? parsedAuthors);
+  const parsedAuthors = normalizeAuthorEntries(
+    parseAuthorEntriesFromFrontMatter(frontMatterLines),
+  );
+  const localFallbackAuthors = normalizeAuthorEntries(
+    parseAcmAuthorEntriesFromFrontMatter(frontMatterLines),
+  );
+  const aiAuthors = await tryExtractAuthorsWithAi(frontMatterLines, aiAssist);
+  const authors = normalizeAuthorEntries(
+    aiAuthors && aiAuthors.length > 0
+      ? aiAuthors
+      : parsedAuthors.length > 0
+        ? parsedAuthors
+        : localFallbackAuthors,
+  );
   const titleText = frontMatterLines[0] ?? "";
   if (titleText && templateParas[0]) {
     setParagraphText(templateParas[0], templateWNs, titleText);
   }
 
-  // Remove copied front-matter noise between title and the actual author placeholders.
-  if (authorParaIndexes.top > 1) {
-    for (let i = 1; i < authorParaIndexes.top; i += 1) {
-      clearParagraphContent(templateParas[i], templateWNs);
-      writeParagraphLayout(templateParas[i], templateWNs, "center", 1.0, 0);
+  if (authors.length > 0) {
+    // Remove copied front-matter noise between title and the actual author placeholders.
+    if (authorParaIndexes.top > 1) {
+      for (let i = 1; i < authorParaIndexes.top; i += 1) {
+        clearParagraphContent(templateParas[i], templateWNs);
+        writeParagraphLayout(templateParas[i], templateWNs, "center", 1.0, 0);
+      }
+    }
+
+    if (authorParaIndexes.top >= 0) {
+      const topAuthors = authors.slice(0, 4);
+      if (topAuthors.length > 1) {
+        setParagraphAuthorColumns(
+          templateParas[authorParaIndexes.top],
+          templateWNs,
+          topAuthors,
+        );
+      } else {
+        writeAuthorParagraphContent(
+          templateParas[authorParaIndexes.top],
+          templateWNs,
+          topAuthors,
+        );
+      }
+    }
+
+    // Remove empty publication-author gap paragraphs between top row and lower row.
+    if (
+      authorParaIndexes.top >= 0 &&
+      authorParaIndexes.fifth > authorParaIndexes.top + 1
+    ) {
+      removeInterveningBodyParagraphs(
+        templateBody,
+        templateParas,
+        templateWNs,
+        authorParaIndexes.top,
+        authorParaIndexes.fifth,
+        true,
+      );
+    }
+
+    // Lower-author region should be two centered columns (5th and 6th) below the top row.
+    if (authorParaIndexes.fifth >= 0) {
+      const hasTwoLowerAuthors = !!(authors[4] && authors[5]);
+      const lowerSectionBreakIndex = findFirstSectPrParagraphIndex(
+        templateParas,
+        templateWNs,
+        Math.max(0, authorParaIndexes.top + 1),
+        authorParaIndexes.fifth,
+      );
+      if (lowerSectionBreakIndex >= 0) {
+        setSectionColumnsOnParagraph(
+          templateParas[lowerSectionBreakIndex],
+          templateWNs,
+          hasTwoLowerAuthors ? 4 : 2,
+          "10.80pt",
+        );
+        clearParagraphContent(templateParas[lowerSectionBreakIndex], templateWNs);
+        writeParagraphLayout(
+          templateParas[lowerSectionBreakIndex],
+          templateWNs,
+          "center",
+          1.0,
+          0,
+        );
+      }
+
+      if (hasTwoLowerAuthors) {
+        setParagraphTwoAuthorColumns(
+          templateParas[authorParaIndexes.fifth],
+          templateWNs,
+          authors[4],
+          authors[5],
+          "Times New Roman",
+          9,
+          1,
+        );
+      } else {
+        writeAuthorParagraphContent(
+          templateParas[authorParaIndexes.fifth],
+          templateWNs,
+          authors[4] ? [authors[4]] : [],
+        );
+      }
+    }
+
+    if (authorParaIndexes.sixth >= 0) {
+      if (authors[4] && authors[5]) {
+        clearParagraphContent(
+          templateParas[authorParaIndexes.sixth],
+          templateWNs,
+        );
+        writeParagraphLayout(
+          templateParas[authorParaIndexes.sixth],
+          templateWNs,
+          "center",
+          1.0,
+          0,
+        );
+      } else {
+        writeAuthorParagraphContent(
+          templateParas[authorParaIndexes.sixth],
+          templateWNs,
+          authors[5] ? [authors[5]] : [],
+        );
+      }
     }
   }
 
-  if (authorParaIndexes.top >= 0) {
-    const topAuthors = authors.slice(0, 4);
-    if (topAuthors.length > 1) {
-      setParagraphAuthorColumns(
-        templateParas[authorParaIndexes.top],
-        templateWNs,
-        topAuthors,
-      );
-    } else {
-      writeAuthorParagraphContent(
-        templateParas[authorParaIndexes.top],
-        templateWNs,
-        topAuthors,
-      );
-    }
-  }
-
-  // Remove empty publication-author gap paragraphs between top row and lower row.
-  if (
-    authorParaIndexes.top >= 0 &&
-    authorParaIndexes.fifth > authorParaIndexes.top + 1
-  ) {
-    removeInterveningBodyParagraphs(
-      templateBody,
+  if (authors.length > 0) {
+    const abstractParagraphIndex = findFirstParagraphIndexByTextMatch(
       templateParas,
       templateWNs,
-      authorParaIndexes.top,
-      authorParaIndexes.fifth,
-      true,
+      /^abstract\b/iu,
+      Math.max(
+        authorParaIndexes.sixth,
+        authorParaIndexes.fifth,
+        authorParaIndexes.top,
+      ) + 1,
     );
-  }
-
-  // Lower-author region should be two centered columns (5th and 6th) below the top row.
-  if (authorParaIndexes.fifth >= 0) {
-    const hasTwoLowerAuthors = !!(authors[4] && authors[5]);
-    const lowerSectionBreakIndex = findFirstSectPrParagraphIndex(
-      templateParas,
-      templateWNs,
-      Math.max(0, authorParaIndexes.top + 1),
-      authorParaIndexes.fifth,
-    );
-    if (lowerSectionBreakIndex >= 0) {
-      setSectionColumnsOnParagraph(
-        templateParas[lowerSectionBreakIndex],
+    const cleanupStart =
+      authorParaIndexes.sixth >= 0
+        ? authorParaIndexes.sixth + 1
+        : authorParaIndexes.fifth + 1;
+    if (abstractParagraphIndex > cleanupStart && cleanupStart >= 0) {
+      tightenPreAbstractGap(
+        templateBody,
+        templateParas,
         templateWNs,
-        hasTwoLowerAuthors ? 4 : 2,
-        "10.80pt",
-      );
-      clearParagraphContent(templateParas[lowerSectionBreakIndex], templateWNs);
-      writeParagraphLayout(
-        templateParas[lowerSectionBreakIndex],
-        templateWNs,
-        "center",
-        1.0,
-        0,
+        cleanupStart - 1,
+        abstractParagraphIndex,
       );
     }
-
-    if (hasTwoLowerAuthors) {
-      setParagraphTwoAuthorColumns(
-        templateParas[authorParaIndexes.fifth],
-        templateWNs,
-        authors[4],
-        authors[5],
-        "Times New Roman",
-        9,
-        1,
-      );
-    } else {
-      writeAuthorParagraphContent(
-        templateParas[authorParaIndexes.fifth],
-        templateWNs,
-        authors[4] ? [authors[4]] : [],
-      );
-    }
-  }
-
-  if (authorParaIndexes.sixth >= 0) {
-    if (authors[4] && authors[5]) {
-      clearParagraphContent(
-        templateParas[authorParaIndexes.sixth],
-        templateWNs,
-      );
-      writeParagraphLayout(
-        templateParas[authorParaIndexes.sixth],
-        templateWNs,
-        "center",
-        1.0,
-        0,
-      );
-    } else {
-      writeAuthorParagraphContent(
-        templateParas[authorParaIndexes.sixth],
-        templateWNs,
-        authors[5] ? [authors[5]] : [],
-      );
-    }
-  }
-
-  const abstractParagraphIndex = findFirstParagraphIndexByTextMatch(
-    templateParas,
-    templateWNs,
-    /^abstract\b/iu,
-    Math.max(
-      authorParaIndexes.sixth,
-      authorParaIndexes.fifth,
-      authorParaIndexes.top,
-    ) + 1,
-  );
-  const cleanupStart =
-    authorParaIndexes.sixth >= 0
-      ? authorParaIndexes.sixth + 1
-      : authorParaIndexes.fifth + 1;
-  if (abstractParagraphIndex > cleanupStart && cleanupStart >= 0) {
-    tightenPreAbstractGap(
-      templateBody,
-      templateParas,
-      templateWNs,
-      cleanupStart - 1,
-      abstractParagraphIndex,
-    );
   }
 
   applyPublicationRuleBasedFormatting(templateDoc, styleConfig);
@@ -1522,6 +3139,7 @@ function requireJsZip() {
 export async function formatDocxPublication(
   arrayBuffer: ArrayBuffer,
   styleConfig: PublicationFormattingConfig,
+  aiAssist = AI_ASSIST_ENABLED,
 ): Promise<Blob> {
   const JSZip = requireJsZip();
   const [inputZip, pubformResponse] = await Promise.all([
@@ -1532,28 +3150,25 @@ export async function formatDocxPublication(
     throw new Error("Unable to load publication format source file.");
   }
   const pubformZip = await JSZip.loadAsync(await pubformResponse.arrayBuffer());
-  await applyPublicationTemplate(inputZip, pubformZip, styleConfig);
+  await applyPublicationTemplate(inputZip, pubformZip, styleConfig, aiAssist);
   return pubformZip.generateAsync({ type: "blob" }) as Promise<Blob>;
 }
 
 export async function formatDocxAcm(
   arrayBuffer: ArrayBuffer,
   styleConfig: AcmFormattingConfig,
+  aiAssist = AI_ASSIST_ENABLED,
 ): Promise<Blob> {
   const JSZip = requireJsZip();
-  const [targetZip, acmResponse] = await Promise.all([
-    JSZip.loadAsync(arrayBuffer),
-    fetch(ACM_SOURCE_FILE),
-  ]);
-  if (!acmResponse.ok) {
-    throw new Error("Unable to load ACM conference source file.");
-  }
-
-  // Use the local ACM file as the rules reference (no raw XML copy to output).
-  await acmResponse.arrayBuffer();
-
+  const targetZip = await JSZip.loadAsync(arrayBuffer);
   const targetDoc = await parseDocFromZip(targetZip, "word/document.xml");
-  applyAcmRuleBasedFormatting(targetDoc, styleConfig);
+  const wNs = resolveWNs(targetDoc);
+  const authors = await getAcmAuthors(targetDoc, wNs, aiAssist);
+  const paragraphHints = await tryClassifyAcmParagraphsWithAi(
+    targetDoc,
+    aiAssist,
+  );
+  applyAcmRuleBasedFormatting(targetDoc, styleConfig, paragraphHints, authors);
   targetZip.file("word/document.xml", serializeDoc(targetDoc));
 
   return targetZip.generateAsync({ type: "blob" }) as Promise<Blob>;
@@ -1565,7 +3180,15 @@ export async function formatDocxConference(
 ): Promise<Blob> {
   const resolvedConfig = resolveConferenceStyleConfig(options.styleConfig);
   if (options.format === "pubform") {
-    return formatDocxPublication(arrayBuffer, resolvedConfig.pubform);
+    return formatDocxPublication(
+      arrayBuffer,
+      resolvedConfig.pubform,
+      options.aiAssist ?? AI_ASSIST_ENABLED,
+    );
   }
-  return formatDocxAcm(arrayBuffer, resolvedConfig.acm);
+  return formatDocxAcm(
+    arrayBuffer,
+    resolvedConfig.acm,
+    options.aiAssist ?? AI_ASSIST_ENABLED,
+  );
 }

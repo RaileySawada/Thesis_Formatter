@@ -239,6 +239,13 @@ export interface ConferenceTextStyle {
   italic?: boolean;
   uppercase?: boolean;
   titleCase?: boolean;
+  spacingBeforePt?: number;
+  spacingAfterPt?: number;
+  firstLineIndentCm?: number;
+  hangingIndentCm?: number;
+  lineSpacingPt?: number;
+  lineSpacingRule?: "auto" | "exact" | "atLeast";
+  color?: string;
 }
 
 export interface PublicationBodyStyle extends ConferenceTextStyle {
@@ -262,8 +269,24 @@ export interface AcmFormattingConfig {
   title: ConferenceTextStyle;
   subtitle: ConferenceTextStyle;
   author: ConferenceTextStyle;
+  authorAffiliation: ConferenceTextStyle;
+  abstract: ConferenceTextStyle;
+  concepts: ConferenceTextStyle;
+  keywords: ConferenceTextStyle;
+  referenceFormatLabel: ConferenceTextStyle;
+  referenceFormatContent: ConferenceTextStyle;
+  preliminaryFootnote: ConferenceTextStyle;
   heading: ConferenceTextStyle;
+  heading1: ConferenceTextStyle;
+  heading2: ConferenceTextStyle;
+  heading3: ConferenceTextStyle;
   body: ConferenceTextStyle;
+  tableCaption: ConferenceTextStyle;
+  table: ConferenceTextStyle;
+  footnote: ConferenceTextStyle;
+  figure: ConferenceTextStyle;
+  figureCaption: ConferenceTextStyle;
+  equation: ConferenceTextStyle;
   references: ConferenceTextStyle;
 }
 
@@ -315,52 +338,267 @@ export const DEFAULT_PUBLICATION_FORMATTING_CONFIG: PublicationFormattingConfig 
 
 export const DEFAULT_ACM_FORMATTING_CONFIG: AcmFormattingConfig = {
   title: {
-    fontFamily: "Times New Roman",
-    fontSize: 18,
-    lineSpacing: 1.15,
-    alignment: "center",
+    fontFamily: "Linux Biolinum O",
+    fontSize: 12,
+    lineSpacing: 1.0,
+    alignment: "left",
     bold: true,
     italic: false,
+    lineSpacingPt: 18,
+    lineSpacingRule: "atLeast",
+    color: "000000",
   },
   subtitle: {
-    fontFamily: "Times New Roman",
-    fontSize: 11,
+    fontFamily: "Linux Biolinum O",
+    fontSize: 9,
     lineSpacing: 1.0,
-    alignment: "center",
+    alignment: "left",
     bold: false,
     italic: false,
+    spacingAfterPt: 18,
+    lineSpacingPt: 16.65,
+    lineSpacingRule: "atLeast",
+    color: "000000",
   },
   author: {
-    fontFamily: "Times New Roman",
-    fontSize: 10,
+    fontFamily: "Linux Biolinum O",
+    fontSize: 11,
     lineSpacing: 1.0,
-    alignment: "center",
+    alignment: "left",
+    bold: false,
+    italic: false,
+    spacingBeforePt: 3,
+    lineSpacingPt: 16,
+    lineSpacingRule: "atLeast",
+    color: "000000",
+  },
+  authorAffiliation: {
+    fontFamily: "Linux Libertine O",
+    fontSize: 9,
+    lineSpacing: 1.0,
+    alignment: "left",
+    bold: false,
+    italic: false,
+    spacingBeforePt: 3,
+    lineSpacingPt: 14.85,
+    lineSpacingRule: "atLeast",
+    color: "000000",
+  },
+  abstract: {
+    fontFamily: "Linux Libertine O",
+    fontSize: 8,
+    lineSpacing: 1.0,
+    alignment: "both",
+    bold: false,
+    italic: false,
+    spacingBeforePt: 10,
+    lineSpacingPt: 12,
+    lineSpacingRule: "atLeast",
+    color: "000000",
+  },
+  concepts: {
+    fontFamily: "Linux Libertine O",
+    fontSize: 9,
+    lineSpacing: 1.0,
+    alignment: "both",
+    bold: false,
+    italic: false,
+    spacingBeforePt: 7,
+    lineSpacingPt: 13.5,
+    lineSpacingRule: "atLeast",
+    color: "000000",
+  },
+  keywords: {
+    fontFamily: "Linux Libertine O",
+    fontSize: 8,
+    lineSpacing: 1.0,
+    alignment: "both",
+    bold: false,
+    italic: false,
+    spacingBeforePt: 7,
+    lineSpacingPt: 13.5,
+    lineSpacingRule: "atLeast",
+    color: "000000",
+  },
+  referenceFormatLabel: {
+    fontFamily: "Linux Libertine O",
+    fontSize: 8,
+    lineSpacing: 1.0,
+    alignment: "both",
     bold: true,
     italic: false,
+    spacingBeforePt: 8,
+    lineSpacingPt: 9.6,
+    lineSpacingRule: "atLeast",
+    color: "000000",
+  },
+  referenceFormatContent: {
+    fontFamily: "Linux Libertine O",
+    fontSize: 8,
+    lineSpacing: 1.0,
+    alignment: "both",
+    bold: false,
+    italic: false,
+    spacingBeforePt: 1,
+    lineSpacingPt: 12,
+    lineSpacingRule: "exact",
+    color: "000000",
+  },
+  preliminaryFootnote: {
+    fontFamily: "Linux Libertine O",
+    fontSize: 7,
+    lineSpacing: 1.0,
+    alignment: "both",
+    bold: false,
+    italic: false,
+    spacingBeforePt: 0,
+    spacingAfterPt: 0,
+    color: "000000",
   },
   heading: {
-    fontFamily: "Times New Roman",
-    fontSize: 12,
-    lineSpacing: 1.05,
+    fontFamily: "Linux Biolinum O",
+    fontSize: 9,
+    lineSpacing: 1.0,
     alignment: "left",
     bold: true,
     italic: false,
+    uppercase: true,
+    spacingBeforePt: 12,
+    spacingAfterPt: 3,
+    color: "000000",
+  },
+  heading1: {
+    fontFamily: "Linux Biolinum O",
+    fontSize: 9,
+    lineSpacing: 1.0,
+    alignment: "left",
+    bold: true,
+    italic: false,
+    uppercase: true,
+    spacingBeforePt: 12,
+    spacingAfterPt: 3,
+    color: "000000",
+  },
+  heading2: {
+    fontFamily: "Linux Biolinum O",
+    fontSize: 9,
+    lineSpacing: 1.0,
+    alignment: "left",
+    bold: true,
+    italic: false,
+    titleCase: true,
+    spacingBeforePt: 12,
+    spacingAfterPt: 3,
+    color: "000000",
+  },
+  heading3: {
+    fontFamily: "Linux Biolinum O",
+    fontSize: 9,
+    lineSpacing: 1.0,
+    alignment: "both",
+    bold: false,
+    italic: true,
+    spacingBeforePt: 12,
+    spacingAfterPt: 3,
+    color: "000000",
   },
   body: {
-    fontFamily: "Times New Roman",
-    fontSize: 10,
+    fontFamily: "Linux Libertine O",
+    fontSize: 9,
     lineSpacing: 1.0,
-    alignment: "left",
+    alignment: "both",
     bold: false,
     italic: false,
+    spacingBeforePt: 0,
+    spacingAfterPt: 0,
+    firstLineIndentCm: 0.42,
+    lineSpacingPt: 13.5,
+    lineSpacingRule: "atLeast",
+    color: "000000",
+  },
+  tableCaption: {
+    fontFamily: "Linux Biolinum O",
+    fontSize: 9,
+    lineSpacing: 1.0,
+    alignment: "center",
+    bold: false,
+    italic: false,
+    spacingBeforePt: 9,
+    spacingAfterPt: 6,
+    color: "000000",
+  },
+  table: {
+    fontFamily: "Linux Libertine O",
+    fontSize: 8,
+    lineSpacing: 1.0,
+    alignment: "both",
+    bold: false,
+    italic: false,
+    lineSpacingPt: 11,
+    lineSpacingRule: "atLeast",
+    color: "000000",
+  },
+  footnote: {
+    fontFamily: "Times New Roman",
+    fontSize: 8,
+    lineSpacing: 1.0,
+    alignment: "center",
+    bold: false,
+    italic: false,
+    spacingBeforePt: 3,
+    spacingAfterPt: 10,
+    color: "000000",
+  },
+  figure: {
+    fontFamily: "Linux Libertine O",
+    fontSize: 9,
+    lineSpacing: 1.0,
+    alignment: "center",
+    bold: false,
+    italic: false,
+    spacingBeforePt: 6,
+    spacingAfterPt: 10,
+    lineSpacingPt: 11.25,
+    lineSpacingRule: "atLeast",
+    color: "000000",
+  },
+  figureCaption: {
+    fontFamily: "Linux Biolinum O",
+    fontSize: 8,
+    lineSpacing: 1.0,
+    alignment: "center",
+    bold: false,
+    italic: false,
+    spacingBeforePt: 3,
+    spacingAfterPt: 9,
+    lineSpacingPt: 10,
+    lineSpacingRule: "atLeast",
+    color: "000000",
+  },
+  equation: {
+    fontFamily: "Linux Libertine O",
+    fontSize: 9,
+    lineSpacing: 1.0,
+    alignment: "center",
+    bold: false,
+    italic: false,
+    spacingBeforePt: 0,
+    spacingAfterPt: 0,
+    color: "000000",
   },
   references: {
-    fontFamily: "Times New Roman",
-    fontSize: 10,
+    fontFamily: "Linux Libertine O",
+    fontSize: 7,
     lineSpacing: 1.0,
-    alignment: "left",
+    alignment: "both",
     bold: false,
     italic: false,
+    spacingBeforePt: 0,
+    spacingAfterPt: 3,
+    hangingIndentCm: 0.63,
+    lineSpacingPt: 8.4,
+    lineSpacingRule: "atLeast",
+    color: "000000",
   },
 };
 

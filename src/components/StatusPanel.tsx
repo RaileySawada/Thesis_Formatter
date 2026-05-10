@@ -132,19 +132,26 @@ export default function StatusPanel({
           className="mt-1 text-[10px]"
           style={{ color: "rgba(255,255,255,0.68)" }}
         >
-          {!aiAssistEnabled
-            ? "AI Check: Off (local rule-based formatter)"
-            : aiStatus === "running"
-              ? "AI Check: Running..."
-              : aiStatus === "success"
-                ? `AI Check: Success in ${formatDuration(lastAiMs)}`
-                : `AI Check: Failed${lastAiMs !== null ? ` after ${formatDuration(lastAiMs)}` : ""}. Local fallback used.`}
+          {formattingStandard !== "conference"
+            ? "AI Check: Not used in CCC mode"
+            : !aiAssistEnabled
+              ? "AI Check: Off (local rule-based formatter)"
+              : aiStatus === "running"
+                ? "AI Check: Running..."
+                : aiStatus === "success"
+                  ? `AI Check: Success in ${formatDuration(lastAiMs)}`
+                  : aiStatus === "failed"
+                    ? `AI Check: Failed${lastAiMs !== null ? ` after ${formatDuration(lastAiMs)}` : ""}. AI still attempted during formatting; local fallback available.`
+                    : "AI Check: Ready for conference runs"}
         </p>
-        {aiError && aiStatus === "failed" && (
-          <p className="mt-1 text-[10px]" style={{ color: "#fecaca" }}>
-            {aiError}
-          </p>
-        )}
+        {formattingStandard === "conference" &&
+          aiAssistEnabled &&
+          aiError &&
+          aiStatus === "failed" && (
+            <p className="mt-1 text-[10px]" style={{ color: "#fecaca" }}>
+              {aiError}
+            </p>
+          )}
       </div>
 
       <div className="mt-5 space-y-2.5 flex-1">

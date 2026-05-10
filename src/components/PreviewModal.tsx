@@ -95,29 +95,59 @@ function conferencePreviewRules(
   const acm = conferenceConfig.acm;
   return [
     [
-      "fa-heading",
-      "Title",
-      `${acm.title.fontFamily} ${acm.title.fontSize}pt, ${alignLabel(acm.title.alignment)}, ${acm.title.bold ? "bold" : "regular"}, line spacing ${acm.title.lineSpacing.toFixed(2)}.`,
-    ],
-    [
       "fa-file-lines",
-      "Subtitle / Front Matter",
-      `${acm.subtitle.fontFamily} ${acm.subtitle.fontSize}pt, ${alignLabel(acm.subtitle.alignment)}, ${acm.subtitle.italic ? "italic" : "regular"}.`,
+      "Preliminary Page",
+      `Title: ${acm.title.fontFamily} ${acm.title.fontSize}pt, ${alignLabel(acm.title.alignment)}. Subtitle: ${acm.subtitle.fontFamily} ${acm.subtitle.fontSize}pt, line spacing ${acm.subtitle.lineSpacingPt?.toFixed(2) ?? acm.subtitle.lineSpacing.toFixed(2)} pt.`,
     ],
     [
       "fa-users",
-      "Author Block",
-      `${acm.author.fontFamily} ${acm.author.fontSize}pt, ${alignLabel(acm.author.alignment)}, ${acm.author.bold ? "bold" : "regular"}.`,
+      "Authors / Abstract",
+      `Author: ${acm.author.fontFamily} ${acm.author.fontSize}pt. Affiliation: ${acm.authorAffiliation.fontFamily} ${acm.authorAffiliation.fontSize}pt. Abstract: ${acm.abstract.fontFamily} ${acm.abstract.fontSize}pt, ${alignLabel(acm.abstract.alignment)}.`,
+    ],
+    [
+      "fa-book-open",
+      "ACM Front Matter",
+      `CCS: ${acm.concepts.fontFamily} ${acm.concepts.fontSize}pt. Keywords: ${acm.keywords.fontFamily} ${acm.keywords.fontSize}pt. Reference format: ${acm.referenceFormatContent.fontFamily} ${acm.referenceFormatContent.fontSize}pt.`,
+    ],
+    [
+      "fa-heading",
+      "Heading 1",
+      `${acm.heading1.fontFamily} ${acm.heading1.fontSize}pt, ${alignLabel(acm.heading1.alignment)}, ${acm.heading1.uppercase ? "uppercase" : "normal case"}, ${acm.heading1.bold ? "bold" : "regular"}, spacing ${acm.heading1.spacingBeforePt?.toFixed(0) ?? "0"}/${acm.heading1.spacingAfterPt?.toFixed(0) ?? "0"} pt.`,
+    ],
+    [
+      "fa-file-lines",
+      "Heading 2",
+      `${acm.heading2.fontFamily} ${acm.heading2.fontSize}pt, ${alignLabel(acm.heading2.alignment)}, ${acm.heading2.titleCase ? "title case" : "source case"}, ${acm.heading2.bold ? "bold" : "regular"}.`,
+    ],
+    [
+      "fa-users",
+      "Heading 3",
+      `${acm.heading3.fontFamily} ${acm.heading3.fontSize}pt, ${alignLabel(acm.heading3.alignment)}, ${acm.heading3.italic ? "italic" : "regular"}.`,
     ],
     [
       "fa-list-ol",
-      "Section Headings",
-      `${acm.heading.fontFamily} ${acm.heading.fontSize}pt, ${alignLabel(acm.heading.alignment)}, ${acm.heading.bold ? "bold" : "regular"}.`,
+      "Body Paragraph",
+      `${acm.body.fontFamily} ${acm.body.fontSize}pt, ${alignLabel(acm.body.alignment)}, first-line indent ${acm.body.firstLineIndentCm?.toFixed(2) ?? "0.00"} cm, line spacing ${acm.body.lineSpacingPt?.toFixed(2) ?? acm.body.lineSpacing.toFixed(2)} pt.`,
     ],
     [
-      "fa-align-left",
-      "Body and References",
-      `Body: ${acm.body.fontFamily} ${acm.body.fontSize}pt (${alignLabel(acm.body.alignment)}). References: ${acm.references.fontFamily} ${acm.references.fontSize}pt (${alignLabel(acm.references.alignment)}).`,
+      "fa-table",
+      "Table Caption / Table Text",
+      `Caption: ${acm.tableCaption.fontFamily} ${acm.tableCaption.fontSize}pt, ${alignLabel(acm.tableCaption.alignment)}. Table: ${acm.table.fontFamily} ${acm.table.fontSize}pt, line spacing ${acm.table.lineSpacingPt?.toFixed(2) ?? acm.table.lineSpacing.toFixed(2)} pt.`,
+    ],
+    [
+      "fa-image",
+      "Figure / Caption",
+      `Figure: ${acm.figure.fontFamily} ${acm.figure.fontSize}pt, ${alignLabel(acm.figure.alignment)}. Caption: ${acm.figureCaption.fontFamily} ${acm.figureCaption.fontSize}pt, ${alignLabel(acm.figureCaption.alignment)}.`,
+    ],
+    [
+      "fa-note-sticky",
+      "Footnote / Equation",
+      `Footnote: ${acm.footnote.fontFamily} ${acm.footnote.fontSize}pt, centered. Equation: ${acm.equation.fontFamily} ${acm.equation.fontSize}pt, centered.`,
+    ],
+    [
+      "fa-quote-right",
+      "References",
+      `${acm.references.fontFamily} ${acm.references.fontSize}pt, ${alignLabel(acm.references.alignment)}, hanging indent ${acm.references.hangingIndentCm?.toFixed(2) ?? "0.00"} cm, numbered [1] style.`,
     ],
   ];
 }

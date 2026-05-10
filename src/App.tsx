@@ -92,6 +92,9 @@ function toUserSafeErrorMessage(error: unknown): string {
     error instanceof Error ? error.message.trim() : String(error ?? "").trim();
   if (!raw) return "Formatting failed. Please try again.";
 
+  if (/ai request timed out|aborted|aborterror/iu.test(raw)) {
+    return "AI service did not respond in time. Local formatting fallback was used.";
+  }
   if (/missing\s+pollinations_api_key/iu.test(raw)) {
     return "AI service key is missing in the server configuration.";
   }
@@ -277,12 +280,12 @@ export default function App() {
   const [configApa, setConfigApa] = useState<FormattingConfig>(() =>
     loadConfig("thesis_formatting_config_apa", DEFAULT_CONFIG_APA),
   );
-  const CONFERENCE_CONFIG_VERSION = "v1";
+  const CONFERENCE_CONFIG_VERSION = "v6";
   const loadConferenceConfig = (): ConferenceFormattingConfig => {
     const key = "thesis_conference_formatting_config";
     const saved = localStorage.getItem(key);
     const savedVersion = localStorage.getItem(`${key}_version`);
-    if (saved) {
+    if (saved && savedVersion === CONFERENCE_CONFIG_VERSION) {
       try {
         const parsed = JSON.parse(saved);
         const merged = mergeDeep(DEFAULT_CONFERENCE_FORMATTING_CONFIG, parsed);
@@ -495,47 +498,53 @@ export default function App() {
       },
     ]);
 
-    let runAiStatus: AiRunStatus = AI_ASSIST_ENABLED ? "running" : "not-used";
+    let runAiStatus: AiRunStatus = "not-used";
     let runAiMs: number | null = null;
     setAiStatus(runAiStatus);
 
     try {
-      if (AI_ASSIST_ENABLED) {
-        pushProcessLog("info", "Checking AI assistant connectivity...");
-        const aiStartedAt = performance.now();
-        try {
-          const aiResult = await requestPollinations({
-            prompt:
-              "Reply only with READY. This is a health check for a formatter workflow.",
-            temperature: 0,
-            maxTokens: 8,
-          });
-          void aiResult;
-          runAiStatus = "success";
-        } catch (aiErr) {
-          runAiStatus = "failed";
-          setAiError(toUserSafeErrorMessage(aiErr));
-        } finally {
-          runAiMs = Math.round(performance.now() - aiStartedAt);
-          setLastAiMs(runAiMs);
+      if (formattingStandard === "conference") {
+        const shouldCheckAi = AI_ASSIST_ENABLED;
+        if (shouldCheckAi) {
+          runAiStatus = "running";
           setAiStatus(runAiStatus);
-          if (runAiStatus === "success") {
-            pushProcessLog(
-              "success",
-              `AI check passed in ${formatDuration(runAiMs)}.`,
-            );
-          } else {
-            pushProcessLog(
-              "error",
-              `AI check failed after ${formatDuration(runAiMs)}. Local fallback active.`,
-            );
+          pushProcessLog("info", "Checking AI assistant connectivity...");
+          const aiStartedAt = performance.now();
+          try {
+            const aiResult = await requestPollinations({
+              prompt:
+                "Reply only with READY. This is a health check for a formatter workflow.",
+              temperature: 0,
+              maxTokens: 8,
+              timeoutMs: 10000,
+            });
+            void aiResult;
+            runAiStatus = "success";
+          } catch (aiErr) {
+            runAiStatus = "failed";
+            setAiError(toUserSafeErrorMessage(aiErr));
+          } finally {
+            runAiMs = Math.round(performance.now() - aiStartedAt);
+            setLastAiMs(runAiMs);
+            setAiStatus(runAiStatus);
+            if (runAiStatus === "success") {
+              pushProcessLog(
+                "success",
+                `AI check passed in ${formatDuration(runAiMs)}.`,
+              );
+            } else {
+              pushProcessLog(
+                "error",
+                `AI check failed after ${formatDuration(runAiMs)}. Formatting will still try AI when available and fall back locally.`,
+              );
+            }
           }
+        } else {
+          pushProcessLog(
+            "info",
+            "AI check disabled. Using local rule-based formatting.",
+          );
         }
-      } else {
-        pushProcessLog(
-          "info",
-          "AI check disabled. Using local rule-based formatting.",
-        );
       }
 
       const runPreliminary = selectedSections.includes("preliminary");
@@ -556,6 +565,7 @@ export default function App() {
         blob = await formatDocxConference(currentBuffer, {
           format: conferenceFormat,
           styleConfig: conferenceFormattingConfig,
+          aiAssist: AI_ASSIST_ENABLED,
         });
         pushProcessLog("success", `${conferenceLabel} formatting completed.`);
       } else {
@@ -614,11 +624,13 @@ export default function App() {
       setLastRunMs(totalMs);
 
       const aiSummary =
-        runAiStatus === "success" && runAiMs !== null
-          ? ` AI check: success in ${formatDuration(runAiMs)}.`
-          : runAiStatus === "failed"
-            ? " AI check: failed. Local formatting fallback used."
-            : " AI check: off (local rule-based formatting).";
+        formattingStandard === "conference"
+          ? runAiStatus === "success" && runAiMs !== null
+            ? ` AI check: success in ${formatDuration(runAiMs)}.`
+            : runAiStatus === "failed"
+              ? " AI check: failed. AI was still attempted with local fallback available."
+              : " AI check: off (local rule-based formatting)."
+          : "";
 
       showToast(
         `Formatted in ${formatDuration(totalMs)}.${aiSummary} Download started.`,
@@ -1236,7 +1248,9 @@ export default function App() {
                 processing={processing}
                 activeElapsedMs={activeElapsedMs}
                 lastRunMs={lastRunMs}
-                aiAssistEnabled={AI_ASSIST_ENABLED}
+                aiAssistEnabled={
+                  formattingStandard === "conference" && AI_ASSIST_ENABLED
+                }
                 aiStatus={aiStatus}
                 lastAiMs={lastAiMs}
                 aiError={aiError}

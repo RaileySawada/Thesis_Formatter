@@ -48,11 +48,6 @@ export async function handler(event) {
   }
 
   const apiKey = process.env.POLLINATIONS_API_KEY;
-  if (!apiKey) {
-    return json(500, {
-      error: "Missing POLLINATIONS_API_KEY environment variable.",
-    });
-  }
 
   let body = {};
   try {
@@ -92,12 +87,16 @@ export async function handler(event) {
 
   let upstream;
   try {
+    const headers = {
+      "content-type": "application/json",
+    };
+    if (apiKey) {
+      headers.authorization = `Bearer ${apiKey}`;
+    }
+
     upstream = await fetch(url, {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${apiKey}`,
-      },
+      headers,
       body: JSON.stringify(payload),
     });
   } catch (error) {

@@ -11,6 +11,7 @@ export interface PollinationsRequest {
   model?: string;
   temperature?: number;
   maxTokens?: number;
+  timeoutMs?: number;
 }
 
 export interface PollinationsResponse {
@@ -31,14 +32,38 @@ const POLLINATIONS_ENDPOINT =
 export async function requestPollinations(
   input: PollinationsRequest,
 ): Promise<PollinationsResponse> {
-  const response = await fetch(POLLINATIONS_ENDPOINT, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      ...input,
-      max_tokens: input.maxTokens,
-    }),
-  });
+  const { timeoutMs = 0, maxTokens, ...payload } = input;
+  const controller =
+    timeoutMs > 0 && typeof AbortController !== "undefined"
+      ? new AbortController()
+      : undefined;
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  if (controller) {
+    timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(POLLINATIONS_ENDPOINT, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        ...payload,
+        max_tokens: maxTokens,
+      }),
+      signal: controller?.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("AI request timed out.");
+    }
+    throw error;
+  } finally {
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId);
+    }
+  }
 
   const raw = await response.text();
   let json: {

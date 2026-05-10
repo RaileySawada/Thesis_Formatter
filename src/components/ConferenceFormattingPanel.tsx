@@ -14,6 +14,8 @@ interface Props {
 
 const FONT_FAMILIES = [
   "Times New Roman",
+  "Linux Biolinum O",
+  "Linux Libertine O",
   "Garamond",
   "Arial",
   "Calibri",
@@ -27,6 +29,25 @@ const ALIGNMENTS: { value: ConferenceTextAlignment; icon: string }[] = [
   { value: "right", icon: "fa-align-right" },
   { value: "both", icon: "fa-align-justify" },
 ];
+
+function toPreviewTitleCase(text: string): string {
+  return text
+    .split(/\s+/u)
+    .map((token) => {
+      if (!/[A-Za-z]/u.test(token)) return token;
+      if (/\d/u.test(token)) return token;
+      if (/^[A-Z]{2,4}$/u.test(token)) return token;
+      const parts = token.split(/([\-\/])/u);
+      return parts
+        .map((part) => {
+          if (part === "-" || part === "/") return part;
+          if (!/[A-Za-z]/u.test(part)) return part;
+          return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+        })
+        .join("");
+    })
+    .join(" ");
+}
 
 function Stepper({
   label,
@@ -128,11 +149,19 @@ function PreviewCard({
   sample: string;
   style: ConferenceTextStyle;
 }) {
+  const displaySample = style.uppercase
+    ? sample.toUpperCase()
+    : style.titleCase
+      ? toPreviewTitleCase(sample)
+      : sample;
+  const lineHeight = style.lineSpacingPt
+    ? style.lineSpacingPt / style.fontSize
+    : style.lineSpacing;
   const css = useMemo<CSSProperties>(
     () => ({
       fontFamily: style.fontFamily,
       fontSize: `${style.fontSize}px`,
-      lineHeight: style.lineSpacing,
+      lineHeight,
       textAlign:
         (style.alignment === "both" ? "justify" : style.alignment) as CSSProperties["textAlign"],
       fontWeight: style.bold ? "700" : "400",
@@ -140,8 +169,10 @@ function PreviewCard({
       textTransform: style.uppercase ? "uppercase" : "none",
       color: "#334155",
       whiteSpace: "pre-line" as const,
+      marginTop: style.spacingBeforePt ? `${style.spacingBeforePt * 1.333}px` : undefined,
+      marginBottom: style.spacingAfterPt ? `${style.spacingAfterPt * 1.333}px` : undefined,
     }),
-    [style],
+    [style, lineHeight],
   );
 
   return (
@@ -150,7 +181,7 @@ function PreviewCard({
         Preview: {title}
       </p>
       <div className="rounded-lg border border-dashed p-3" style={{ borderColor: "#cbd5e1" }}>
-        <p style={css}>{sample}</p>
+        <p style={css}>{displaySample}</p>
       </div>
     </div>
   );
@@ -196,6 +227,16 @@ function StyleEditor({
   title: string;
   extra?: React.ReactNode;
 }) {
+  const usesExactLineSpacing = typeof style.lineSpacingPt === "number";
+  const showSpacing =
+    typeof style.spacingBeforePt === "number" ||
+    typeof style.spacingAfterPt === "number";
+  const showIndent =
+    typeof style.firstLineIndentCm === "number" ||
+    typeof style.hangingIndentCm === "number";
+  const showCaseToggle =
+    typeof style.uppercase === "boolean" || typeof style.titleCase === "boolean";
+
   return (
     <div className="space-y-4">
       <PreviewCard title={title} sample={sample} style={style} />
@@ -226,18 +267,80 @@ function StyleEditor({
         />
       </div>
       <div className="grid grid-cols-2 gap-4">
-        <Stepper
-          label="Line Spacing"
-          value={style.lineSpacing}
-          step={0.05}
-          min={0.8}
-          onChange={(v) => onChange({ lineSpacing: v })}
-        />
+        {usesExactLineSpacing ? (
+          <Stepper
+            label="Line Spacing (pt)"
+            value={style.lineSpacingPt ?? 0}
+            step={0.05}
+            min={0}
+            onChange={(v) => onChange({ lineSpacingPt: v })}
+          />
+        ) : (
+          <Stepper
+            label="Line Spacing"
+            value={style.lineSpacing}
+            step={0.05}
+            min={0.8}
+            onChange={(v) => onChange({ lineSpacing: v })}
+          />
+        )}
         <ToggleGroup
           value={style.alignment}
           onChange={(v) => onChange({ alignment: v })}
         />
       </div>
+      {showSpacing && (
+        <div className="grid grid-cols-2 gap-4">
+          {typeof style.spacingBeforePt === "number" ? (
+            <Stepper
+              label="Spacing Before (pt)"
+              value={style.spacingBeforePt}
+              step={1}
+              min={0}
+              onChange={(v) => onChange({ spacingBeforePt: v })}
+            />
+          ) : (
+            <div />
+          )}
+          {typeof style.spacingAfterPt === "number" ? (
+            <Stepper
+              label="Spacing After (pt)"
+              value={style.spacingAfterPt}
+              step={1}
+              min={0}
+              onChange={(v) => onChange({ spacingAfterPt: v })}
+            />
+          ) : (
+            <div />
+          )}
+        </div>
+      )}
+      {showIndent && (
+        <div className="grid grid-cols-2 gap-4">
+          {typeof style.firstLineIndentCm === "number" ? (
+            <Stepper
+              label="First Line Indent (cm)"
+              value={style.firstLineIndentCm}
+              step={0.01}
+              min={0}
+              onChange={(v) => onChange({ firstLineIndentCm: v })}
+            />
+          ) : (
+            <div />
+          )}
+          {typeof style.hangingIndentCm === "number" ? (
+            <Stepper
+              label="Hanging Indent (cm)"
+              value={style.hangingIndentCm}
+              step={0.01}
+              min={0}
+              onChange={(v) => onChange({ hangingIndentCm: v })}
+            />
+          ) : (
+            <div />
+          )}
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-2">
         <button
           type="button"
@@ -261,11 +364,65 @@ function StyleEditor({
               ? { borderColor: "var(--accent)", background: "var(--accent-subtle-strong)", color: "var(--accent)" }
               : { borderColor: "var(--border)", background: "var(--surface)", color: "var(--text-muted)" }
           }
-        >
+          >
           <i className="fa-solid fa-italic mr-1" />
           Italic
         </button>
       </div>
+      {showCaseToggle && (
+        <div className="grid grid-cols-2 gap-2">
+          {typeof style.uppercase === "boolean" ? (
+            <button
+              type="button"
+              onClick={() => onChange({ uppercase: !style.uppercase })}
+              className="rounded-xl border py-2 text-xs font-bold"
+              style={
+                style.uppercase
+                  ? {
+                      borderColor: "var(--accent)",
+                      background: "var(--accent-subtle-strong)",
+                      color: "var(--accent)",
+                    }
+                  : {
+                      borderColor: "var(--border)",
+                      background: "var(--surface)",
+                      color: "var(--text-muted)",
+                    }
+              }
+            >
+              <i className="fa-solid fa-text-height mr-1" />
+              Uppercase
+            </button>
+          ) : (
+            <div />
+          )}
+          {typeof style.titleCase === "boolean" ? (
+            <button
+              type="button"
+              onClick={() => onChange({ titleCase: !style.titleCase })}
+              className="rounded-xl border py-2 text-xs font-bold"
+              style={
+                style.titleCase
+                  ? {
+                      borderColor: "var(--accent)",
+                      background: "var(--accent-subtle-strong)",
+                      color: "var(--accent)",
+                    }
+                  : {
+                      borderColor: "var(--border)",
+                      background: "var(--surface)",
+                      color: "var(--text-muted)",
+                    }
+              }
+            >
+              <i className="fa-solid fa-font mr-1" />
+              Title Case
+            </button>
+          ) : (
+            <div />
+          )}
+        </div>
+      )}
       {extra}
     </div>
   );
@@ -317,25 +474,6 @@ export default function ConferenceFormattingPanel({
             sample="I. INTRODUCTION"
             style={config.pubform.heading1}
             onChange={(u) => updatePub("heading1", u)}
-            extra={
-              <button
-                type="button"
-                onClick={() =>
-                  updatePub("heading1", {
-                    uppercase: !config.pubform.heading1.uppercase,
-                  })
-                }
-                className="w-full rounded-xl border py-2 text-xs font-bold"
-                style={
-                  config.pubform.heading1.uppercase
-                    ? { borderColor: "var(--accent)", background: "var(--accent-subtle-strong)", color: "var(--accent)" }
-                    : { borderColor: "var(--border)", background: "var(--surface)", color: "var(--text-muted)" }
-                }
-              >
-                <i className="fa-solid fa-text-height mr-1" />
-                Uppercase
-              </button>
-            }
           />
         </Section>
 
@@ -345,25 +483,6 @@ export default function ConferenceFormattingPanel({
             sample="A. Sample Title"
             style={config.pubform.heading2}
             onChange={(u) => updatePub("heading2", u)}
-            extra={
-              <button
-                type="button"
-                onClick={() =>
-                  updatePub("heading2", {
-                    titleCase: !config.pubform.heading2.titleCase,
-                  })
-                }
-                className="w-full rounded-xl border py-2 text-xs font-bold"
-                style={
-                  config.pubform.heading2.titleCase
-                    ? { borderColor: "var(--accent)", background: "var(--accent-subtle-strong)", color: "var(--accent)" }
-                    : { borderColor: "var(--border)", background: "var(--surface)", color: "var(--text-muted)" }
-                }
-              >
-                <i className="fa-solid fa-font mr-1" />
-                Title Case
-              </button>
-            }
           />
         </Section>
 
@@ -445,7 +564,7 @@ export default function ConferenceFormattingPanel({
         />
       </Section>
 
-      <Section title="Subtitle and Front Matter" icon="fa-file-lines">
+      <Section title="Subtitle" icon="fa-file-lines">
         <StyleEditor
           title="Subtitle"
           sample="This is the subtitle of the paper"
@@ -456,19 +575,85 @@ export default function ConferenceFormattingPanel({
 
       <Section title="Author Block" icon="fa-users">
         <StyleEditor
-          title="Author Line"
+          title="Author Name"
           sample="First Author's Name, Initials, and Last Name"
           style={config.acm.author}
           onChange={(u) => updateAcm("author", u)}
         />
+        <StyleEditor
+          title="Affiliation and Email"
+          sample="First author's affiliation, an Institution with a very long name, xxxx@gmail.com"
+          style={config.acm.authorAffiliation}
+          onChange={(u) => updateAcm("authorAffiliation", u)}
+        />
       </Section>
 
-      <Section title="Section Heading" icon="fa-list-ol">
+      <Section title="Abstract and Metadata" icon="fa-align-justify">
         <StyleEditor
-          title="Heading"
-          sample="Introduction"
-          style={config.acm.heading}
-          onChange={(u) => updateAcm("heading", u)}
+          title="Abstract"
+          sample="Abstract This paper presents a concise summary of the study."
+          style={config.acm.abstract}
+          onChange={(u) => updateAcm("abstract", u)}
+        />
+        <StyleEditor
+          title="CCS Concepts"
+          sample="CCS CONCEPTS • Insert your first CCS term here • Insert your second CCS term here"
+          style={config.acm.concepts}
+          onChange={(u) => updateAcm("concepts", u)}
+        />
+        <StyleEditor
+          title="Additional Keywords"
+          sample="Additional Keywords and Phrases: Keyword number 1, Keyword number 2"
+          style={config.acm.keywords}
+          onChange={(u) => updateAcm("keywords", u)}
+        />
+      </Section>
+
+      <Section title="ACM Reference Format" icon="fa-book-open">
+        <StyleEditor
+          title="Reference Label"
+          sample="ACM Reference Format:"
+          style={config.acm.referenceFormatLabel}
+          onChange={(u) => updateAcm("referenceFormatLabel", u)}
+        />
+        <StyleEditor
+          title="Reference Content"
+          sample="First Author's Name. 2018. The Title of the Paper: ACM Conference Proceedings Manuscript Submission Template."
+          style={config.acm.referenceFormatContent}
+          onChange={(u) => updateAcm("referenceFormatContent", u)}
+        />
+        <StyleEditor
+          title="Preliminary Footnote"
+          sample="* Place the footnote text for the author (if applicable) here."
+          style={config.acm.preliminaryFootnote}
+          onChange={(u) => updateAcm("preliminaryFootnote", u)}
+        />
+      </Section>
+
+      <Section title="Heading 1" icon="fa-list-ol">
+        <StyleEditor
+          title="Heading 1"
+          sample="1 INTRODUCTION"
+          style={config.acm.heading1}
+          onChange={(u) => updateAcm("heading1", u)}
+        />
+      </Section>
+
+      <Section title="Heading 2" icon="fa-list-ol">
+        <StyleEditor
+          title="Heading 2"
+          sample="1.1 Accessibility"
+          style={config.acm.heading2}
+          onChange={(u) => updateAcm("heading2", u)}
+        />
+      </Section>
+
+      <Section title="Heading 3" icon="fa-list-ul">
+        <StyleEditor
+          title="Heading 3"
+          sample="1.1.1 Heading 3 Title"
+          style={config.acm.heading3}
+          onChange={(u) => updateAcm("heading3", u)}
         />
       </Section>
 
@@ -478,6 +663,60 @@ export default function ConferenceFormattingPanel({
           sample="ACM manuscript body text sample to preview spacing, alignment, and font."
           style={config.acm.body}
           onChange={(u) => updateAcm("body", u)}
+        />
+      </Section>
+
+      <Section title="Table Caption" icon="fa-closed-captioning">
+        <StyleEditor
+          title="Table Caption"
+          sample="Table 1: Sample table caption"
+          style={config.acm.tableCaption}
+          onChange={(u) => updateAcm("tableCaption", u)}
+        />
+      </Section>
+
+      <Section title="Table Text" icon="fa-table">
+        <StyleEditor
+          title="Table"
+          sample="Table cell content sample."
+          style={config.acm.table}
+          onChange={(u) => updateAcm("table", u)}
+        />
+      </Section>
+
+      <Section title="Footnote" icon="fa-note-sticky">
+        <StyleEditor
+          title="Footnote"
+          sample="* Permission to make digital or hard copies for personal or classroom use."
+          style={config.acm.footnote}
+          onChange={(u) => updateAcm("footnote", u)}
+        />
+      </Section>
+
+      <Section title="Figure" icon="fa-image">
+        <StyleEditor
+          title="Figure"
+          sample="Inline figure paragraph sample."
+          style={config.acm.figure}
+          onChange={(u) => updateAcm("figure", u)}
+        />
+      </Section>
+
+      <Section title="Figure Caption" icon="fa-closed-captioning">
+        <StyleEditor
+          title="Figure Caption"
+          sample="Figure 1: Sample Figure."
+          style={config.acm.figureCaption}
+          onChange={(u) => updateAcm("figureCaption", u)}
+        />
+      </Section>
+
+      <Section title="Equation" icon="fa-square-root-variable">
+        <StyleEditor
+          title="Equation"
+          sample="E = mc^2"
+          style={config.acm.equation}
+          onChange={(u) => updateAcm("equation", u)}
         />
       </Section>
 

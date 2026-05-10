@@ -66,11 +66,6 @@ function pollinationsDevProxy(env: Record<string, string>): Plugin {
         }
 
         const apiKey = env.POLLINATIONS_API_KEY || process.env.POLLINATIONS_API_KEY;
-        if (!apiKey) {
-          return sendJson(res, 500, {
-            error: "Missing POLLINATIONS_API_KEY in local environment.",
-          });
-        }
 
         let body: Record<string, unknown> = {};
         try {
@@ -122,12 +117,16 @@ function pollinationsDevProxy(env: Record<string, string>): Plugin {
 
         let upstream;
         try {
+          const headers: Record<string, string> = {
+            "content-type": "application/json",
+          };
+          if (apiKey) {
+            headers.authorization = `Bearer ${apiKey}`;
+          }
+
           upstream = await fetch(url, {
             method: "POST",
-            headers: {
-              "content-type": "application/json",
-              authorization: `Bearer ${apiKey}`,
-            },
+            headers,
             body: JSON.stringify(payload),
           });
         } catch (error) {
